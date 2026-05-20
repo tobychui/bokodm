@@ -25,20 +25,7 @@ type BlockDevice struct {
 
 // GetBlockDevices retrieves block devices using the `blkid` command.
 func GetPartitionIdInfo() ([]BlockDevice, error) {
-	//Check if the current user have superuser privileges
-	cmd := exec.Command("id", "-u")
-	userIDOutput, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if the user ID is 0 (root)
-	// If not, run blkid without sudo
-	if strings.TrimSpace(string(userIDOutput)) == "0" {
-		cmd = exec.Command("blkid")
-	} else {
-		cmd = exec.Command("sudo", "blkid")
-	}
+	cmd := exec.Command("blkid")
 
 	output, err := cmd.Output()
 	if err != nil {

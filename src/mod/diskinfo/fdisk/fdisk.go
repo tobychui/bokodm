@@ -21,7 +21,7 @@ func GetDiskModelAndIdentifier(disk string) (*DiskInfo, error) {
 	//Make sure there is no trailing slash
 	disk = strings.TrimSuffix(disk, "/")
 
-	cmd := exec.Command("sudo", "fdisk", "-l", disk)
+	cmd := exec.Command("fdisk", "-l", disk)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	err := cmd.Run()

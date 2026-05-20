@@ -1,41 +1,54 @@
 ![](img/banner.png)
 
-# bokoFS
+# bokodm
 
-bokoFS (ボコFS) is a self-contained, http based file system that is partially based on WebDAV but with a web UI and API supporting remote SMART health monitoring, RAID configurations and disk usage information. All within a single http server endpoint / port. 
-
-
+bokodm (ボコdm) is a lightweight, self-contained HTTP server for disk monitoring and RAID management on Linux. It combines a static web UI with a REST API for RAID configuration (via `mdadm`), SMART health monitoring, and disk usage information — all served from a single HTTP endpoint.
 
 **Disclaimer**
 
-This project is in its very early stage of development and might not works on all systems. 
+This project is in its early stage of development and may not work on all systems. It must be run with sufficient privileges (e.g. as root or with appropriate capabilities) to access block devices and manage RAID arrays.
 
-### Screenshots
+### Features
 
-![](img/1.jpg)
+- **RAID Management** — Create, delete, assemble, and monitor software RAID arrays via `mdadm`
+- **SMART Monitoring** — Query disk health and SMART attributes via `smartctl`
+- **Disk Information** — List block devices, partitions, filesystem types, and usage via `lsblk`, `blkid`, and `df`
+- **Network Statistics** — Monitor network interface throughput in real time
+- **Static Web UI** — Embedded web interface for RAID status and disk overview
 
-![](img/2.jpg)
+### Requirements
 
-![](img/3.jpg)
+- Linux (Debian-based distros recommended)
+- Run as root or with sufficient permissions to access block devices
+- The following tools must be available in `PATH`:
+  - `mdadm` — RAID management
+  - `smartctl` (smartmontools) — SMART health monitoring
+  - `lsblk`, `blkid`, `df` — disk information (usually pre-installed)
+  - `ffmpeg` — optional, only needed for media transcoding features
 
 ### Build From Source
 
-- Require go compiler 1.23.2 installed on your system
-- Currently only support Debian (and Debian based distros)
-- Require the following package installed
-  - smartmontools (for disk SMART)
-  - ffmpeg (for transcode offloading)
-  - lsblk, blkid and df (usually come with Debian but make sure you have permission to run them)
-  - (To be added)
+Requires Go 1.23.2 or later.
 
-```
+```bash
 cd src
 go mod tidy
-go build
-./bokofsd
-# For debug mode, run 
-# ./bokofsd -debug=true 
+go build -o bokodm
+sudo ./bokodm
 ```
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-p` | `9000` | HTTP port to listen on |
+| `-dev` | `false` | Serve web files from `./web` instead of embedded FS |
+| `-c` | `./config` | Path to the config folder |
+| `-skip_dep_check` | `false` | Skip dependency check on startup |
+
+### Configuration
+
+The mdadm config file path defaults to `/etc/mdadm/mdadm.conf`. It is defined as the `MdadmConfPath` constant in `src/mod/disktool/raid/mdadmConf.go` and can be changed there if needed.
 
 ### License
 

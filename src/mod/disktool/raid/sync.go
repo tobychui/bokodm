@@ -111,21 +111,8 @@ func (m *Manager) SetSyncPendingToReadWrite(devname string) error {
 	// Ensure devname does not already have the /dev/ prefix
 	devname = strings.TrimPrefix(devname, "/dev/")
 
-	// Check if the current user has root privileges by checking the UID
-	hasSudo := os.Geteuid() == 0
-
-	//Check if the device exists
-	if _, err := os.Stat(fmt.Sprintf("/dev/%s", devname)); os.IsNotExist(err) {
-		return fmt.Errorf("device %s does not exist", devname)
-	}
-
 	// Construct the command
-	var cmd *exec.Cmd
-	if hasSudo {
-		cmd = exec.Command("sudo", "mdadm", "--readwrite", fmt.Sprintf("/dev/%s", devname))
-	} else {
-		cmd = exec.Command("mdadm", "--readwrite", fmt.Sprintf("/dev/%s", devname))
-	}
+	cmd := exec.Command("mdadm", "--readwrite", fmt.Sprintf("/dev/%s", devname))
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to set device %s to readwrite: %v, output: %s", devname, err, string(output))
 	}

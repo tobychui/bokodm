@@ -108,7 +108,7 @@ func (m *Manager) ClearSuperblock(devicePath string) error {
 	if !strings.HasPrefix(devicePath, "/dev/") {
 		devicePath = filepath.Join("/dev/", devicePath)
 	}
-	cmd := exec.Command("sudo", "mdadm", "--zero-superblock", devicePath)
+	cmd := exec.Command("mdadm", "--zero-superblock", devicePath)
 
 	err = cmd.Run()
 	if err != nil {
@@ -120,7 +120,7 @@ func (m *Manager) ClearSuperblock(devicePath string) error {
 
 // Use to restart any not-removed RAID device
 func (m *Manager) RestartRAIDService() error {
-	cmd := exec.Command("sudo", "mdadm", "--assemble", "--scan")
+	cmd := exec.Command("mdadm", "--assemble", "--scan")
 
 	// Run the command
 	output, err := cmd.CombinedOutput()
@@ -137,7 +137,7 @@ func (m *Manager) RestartRAIDService() error {
 
 // Stop RAID device with given path
 func (m *Manager) StopRAIDDevice(devicePath string) error {
-	cmd := exec.Command("sudo", "mdadm", "--stop", devicePath)
+	cmd := exec.Command("mdadm", "--stop", devicePath)
 
 	// Run the command
 	err := cmd.Run()
@@ -151,7 +151,7 @@ func (m *Manager) StopRAIDDevice(devicePath string) error {
 // RemoveRAIDDevice removes the specified RAID device member (disk).
 func (m *Manager) RemoveRAIDMember(devicePath string) error {
 	// Construct the mdadm command to remove the RAID device
-	cmd := exec.Command("sudo", "mdadm", "--remove", devicePath)
+	cmd := exec.Command("mdadm", "--remove", devicePath)
 
 	// Run the command
 	output, err := cmd.CombinedOutput()

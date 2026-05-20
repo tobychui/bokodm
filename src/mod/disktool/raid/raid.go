@@ -17,21 +17,6 @@ import (
 type Manager struct {
 }
 
-func PackageExists(packageName string) (bool, error) {
-	cmd := exec.Command("dpkg-query", "-W", "-f='${Status}'", packageName)
-	output, err := cmd.Output()
-	if err != nil {
-		if exitError, ok := err.(*exec.ExitError); ok && exitError.ExitCode() == 1 {
-			// Package not found
-			return false, nil
-		}
-		return false, fmt.Errorf("error checking package: %v", err)
-	}
-
-	// Check if the output contains "install ok installed"
-	return string(output) == "'install ok installed'", nil
-}
-
 // Create a new raid manager
 func NewRaidManager() (*Manager, error) {
 	//Check if platform is supported
@@ -39,17 +24,17 @@ func NewRaidManager() (*Manager, error) {
 		return nil, errors.New("ArozOS do not support RAID management on this platform")
 	}
 
-	//Check if mdadm exists
-	mdadmExists, err := PackageExists("mdadm")
-	if err != nil || !mdadmExists {
-		return nil, errors.New("mdadm not installed on this host")
+	//Check if mdadm exists in PATH
+	_, err := exec.LookPath("mdadm")
+	if err != nil {
+		return nil, errors.New("mdadm not found in PATH. Is it installed?")
 	}
 	return &Manager{}, nil
 }
 
 // Create a virtual image partition at given path with given size
 func CreateVirtualPartition(imagePath string, totalSize int64) error {
-	cmd := exec.Command("sudo", "dd", "if=/dev/zero", "of="+imagePath, "bs=4M", "count="+fmt.Sprintf("%dM", totalSize/(4*1024*1024)))
+	cmd := exec.Command("dd", "if=/dev/zero", "of="+imagePath, "bs=4M", "count="+fmt.Sprintf("%dM", totalSize/(4*1024*1024)))
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -73,7 +58,7 @@ func FormatVirtualPartition(imagePath string) error {
 		return errors.New("given file is not an image path")
 	}
 
-	cmd := exec.Command("sudo", "mkfs.ext4", imagePath)
+	cmd := exec.Command("mkfs.ext4", imagePath)
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

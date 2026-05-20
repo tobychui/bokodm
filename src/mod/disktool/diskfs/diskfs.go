@@ -63,7 +63,7 @@ func FormatStorageDevice(fsType string, devicePath string) error {
 	switch fsType {
 	case "ext4":
 		// Format the device with the specified filesystem type
-		cmd := exec.Command("sudo", "mkfs."+fsType, devicePath)
+		cmd := exec.Command("mkfs."+fsType, devicePath)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return errors.New("unable to format device: " + string(output))
@@ -77,7 +77,7 @@ func FormatStorageDevice(fsType string, devicePath string) error {
 		}
 
 		// Format the device with the specified filesystem type
-		cmd := exec.Command("sudo", "mkfs.vfat", devicePath)
+		cmd := exec.Command("mkfs.vfat", devicePath)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return errors.New("unable to format device: " + string(output))
@@ -91,7 +91,7 @@ func FormatStorageDevice(fsType string, devicePath string) error {
 		}
 
 		//Format the drive
-		cmd := exec.Command("sudo", "mkfs.ntfs", devicePath)
+		cmd := exec.Command("mkfs.ntfs", devicePath)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return errors.New("unable to format device: " + string(output))
@@ -105,7 +105,7 @@ func FormatStorageDevice(fsType string, devicePath string) error {
 
 // List all the storage device in the system, set minSize to 0 for no filter
 func ListAllStorageDevices() (*StorageDevicesMeta, error) {
-	cmd := exec.Command("sudo", "lsblk", "-b", "--json")
+	cmd := exec.Command("lsblk", "-b", "--json")
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -148,7 +148,7 @@ func GetBlockDeviceMeta(devicePath string) (*BlockDeviceMeta, error) {
 
 // Get the disk UUID by current device path (e.g. /dev/sda)
 func GetDiskUUID(devicePath string) (string, error) {
-	cmd := exec.Command("sudo", "blkid", "-s", "UUID", "-o", "value", devicePath)
+	cmd := exec.Command("blkid", "-s", "UUID", "-o", "value", devicePath)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	err := cmd.Run()
@@ -224,7 +224,7 @@ func DeviceIsMounted(devicePath string) (bool, error) {
 // Remember to use full path (e.g. /dev/md0) in the devicePath
 func UnmountDevice(devicePath string) error {
 	// Construct the bash command to unmount the device
-	cmd := exec.Command("sudo", "bash", "-c", fmt.Sprintf("umount -l %s", devicePath))
+	cmd := exec.Command("umount", "-l", devicePath)
 
 	// Run the command
 	output, err := cmd.CombinedOutput()
@@ -240,7 +240,7 @@ func UnmountDevice(devicePath string) error {
 // Remember to use full path (e.g. /dev/md0) in the devicePath
 func ForceUnmountDevice(devicePath string) error {
 	// Construct the bash command to unmount the device
-	cmd := exec.Command("sudo", "bash", "-c", fmt.Sprintf("umount -l %s", devicePath))
+	cmd := exec.Command("umount", "-l", devicePath)
 
 	// Run the command
 	err := cmd.Run()
@@ -256,14 +256,14 @@ func WipeDisk(diskPath string) error {
 	// Unmount the disk
 	isMounted, _ := DeviceIsMounted(diskPath)
 	if isMounted {
-		umountCmd := exec.Command("sudo", "umount", diskPath)
+		umountCmd := exec.Command("umount", diskPath)
 		if err := umountCmd.Run(); err != nil {
 			return fmt.Errorf("error unmounting disk %s: %v", diskPath, err)
 		}
 	}
 
 	// Wipe all filesystem signatures on the entire disk
-	wipeCmd := exec.Command("sudo", "wipefs", "--all", "--force", diskPath)
+	wipeCmd := exec.Command("wipefs", "--all", "--force", diskPath)
 	if err := wipeCmd.Run(); err != nil {
 		return fmt.Errorf("error wiping filesystem signatures on %s: %v", diskPath, err)
 	}

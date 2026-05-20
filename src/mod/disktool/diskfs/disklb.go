@@ -17,7 +17,7 @@ type BlockDeviceModelInfo struct {
 // Get disk model name by disk name (sdX, not /dev/sdX), return the model name (if any) and expected size (not actual)
 // return device labeled size, model and error if any
 func GetDiskModelByName(name string) (string, string, error) {
-	cmd := exec.Command("sudo", "lsblk", "--json", "-o", "NAME,SIZE,MODEL")
+	cmd := exec.Command("lsblk", "--json", "-o", "NAME,SIZE,MODEL")
 
 	output, err := cmd.Output()
 	if err != nil {

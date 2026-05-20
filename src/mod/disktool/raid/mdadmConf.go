@@ -18,9 +18,11 @@ import (
 
 	This package handles the config modification and update for
 	the mdadm module
-
-
 */
+
+// MdadmConfPath is the path to the mdadm configuration file.
+// Update this constant if your system stores the config elsewhere.
+const MdadmConfPath = "/etc/mdadm/mdadm.conf"
 
 // Force mdadm to stop all RAID and load fresh from config file
 // on some Linux distro this is required as mdadm start too early
@@ -59,7 +61,7 @@ func (m *Manager) FlushReloadDev(targetDev *RAIDDevice) error {
 		return errors.New("device is in use")
 	}
 
-	cmdMdadm := exec.Command("sudo", "mdadm", "--stop", "/dev/"+targetDev.Name)
+	cmdMdadm := exec.Command("mdadm", "--stop", "/dev/"+targetDev.Name)
 
 	// Run the command and capture its output
 	_, err = cmdMdadm.Output()
@@ -93,7 +95,7 @@ func removeDevicesEntry(configLine string) string {
 // so the RAID drive will still be seen after a reboot (hopefully)
 // this will automatically add / remove config base on current runtime setup
 func (m *Manager) UpdateMDADMConfig() error {
-	cmdMdadm := exec.Command("sudo", "mdadm", "--detail", "--scan", "--verbose")
+	cmdMdadm := exec.Command("mdadm", "--detail", "--scan", "--verbose")
 
 	// Run the command and capture its output
 	output, err := cmdMdadm.Output()
@@ -102,7 +104,7 @@ func (m *Manager) UpdateMDADMConfig() error {
 	}
 
 	//Load the config from system
-	currentConfigBytes, err := os.ReadFile("/etc/mdadm/mdadm.conf")
+	currentConfigBytes, err := os.ReadFile(MdadmConfPath)
 	if err != nil {
 		return fmt.Errorf("unable to open mdadm.conf: " + err.Error())
 	}
@@ -180,13 +182,14 @@ func (m *Manager) UpdateMDADMConfig() error {
 		return nil
 	}
 
-	// Construct the bash command to append the line to mdadm.conf using echo and tee
+	// Append new config lines directly to mdadm.conf using Go file I/O
+	f, err := os.OpenFile(MdadmConfPath, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("error opening mdadm.conf for writing: %v", err)
+	}
+	defer f.Close()
 	for _, configLine := range newConfigLines {
-		cmd := exec.Command("bash", "-c", fmt.Sprintf(`echo "%s" | sudo tee -a /etc/mdadm/mdadm.conf`, configLine))
-
-		// Run the command
-		err := cmd.Run()
-		if err != nil {
+		if _, err := fmt.Fprintln(f, configLine); err != nil {
 			return fmt.Errorf("error injecting line into mdadm.conf: %v", err)
 		}
 	}
@@ -198,14 +201,24 @@ func (m *Manager) UpdateMDADMConfig() error {
 // Note that this only remove a single line of config. If your line consists of multiple lines
 // you might need to remove it manually
 func (m *Manager) RemoveVolumeFromMDADMConfig(volumeUUID string) error {
-	// Construct the sed command to remove the line containing the volume UUID from mdadm.conf
-	sedCommand := fmt.Sprintf(`sudo sed -i '/UUID=%s/d' /etc/mdadm/mdadm.conf`, volumeUUID)
-
-	// Execute the sed command
-	cmd := exec.Command("bash", "-c", sedCommand)
-	err := cmd.Run()
+	// Read the current config
+	data, err := os.ReadFile(MdadmConfPath)
 	if err != nil {
-		return fmt.Errorf("error removing volume from mdadm.conf: %v", err)
+		return fmt.Errorf("error reading mdadm.conf: %v", err)
+	}
+
+	// Filter out any line containing the target UUID
+	lines := strings.Split(string(data), "\n")
+	filtered := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if !strings.Contains(line, "UUID="+volumeUUID) {
+			filtered = append(filtered, line)
+		}
+	}
+
+	// Write the filtered content back
+	if err := os.WriteFile(MdadmConfPath, []byte(strings.Join(filtered, "\n")), 0644); err != nil {
+		return fmt.Errorf("error writing mdadm.conf: %v", err)
 	}
 
 	return nil

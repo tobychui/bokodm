@@ -70,8 +70,12 @@ func initialization() error {
 	netstatBuffer = nsb
 
 	/* Package Check */
-	if !checkRuntimeEnvironment() {
-		return fmt.Errorf("runtime environment check failed")
+	if !*skipDepCheck {
+		if !checkRuntimeEnvironment() {
+			return fmt.Errorf("runtime environment check failed")
+		}
+	} else {
+		fmt.Println("Dependency check skipped.")
 	}
 
 	/* RAID Manager */

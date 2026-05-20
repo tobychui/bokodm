@@ -22,7 +22,7 @@ type LoopDevice struct {
 
 // List all the loop devices
 func ListAllLoopDevices() ([]*LoopDevice, error) {
-	cmd := exec.Command("sudo", "losetup", "-a")
+	cmd := exec.Command("losetup", "-a")
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -54,7 +54,7 @@ func ListAllLoopDevices() ([]*LoopDevice, error) {
 
 // Mount an given image path as loopback device
 func MountImageAsLoopDevice(imagePath string) error {
-	cmd := exec.Command("sudo", "losetup", "-f", imagePath)
+	cmd := exec.Command("losetup", "-f", imagePath)
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -90,7 +90,7 @@ func UnmountLoopDeviceByImagePath(imagePath string) error {
 
 // Unmount the loop device by id e.g. /dev/loop1
 func UnmountLoopDeviceByID(loopDevId string) error {
-	cmd := exec.Command("sudo", "losetup", "-d", loopDevId)
+	cmd := exec.Command("losetup", "-d", loopDevId)
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

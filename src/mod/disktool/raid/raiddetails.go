@@ -43,7 +43,7 @@ type DeviceInfo struct {
 // GetRAIDInfo retrieves information about a RAID array using the mdadm command.
 // arrayName must be in full path (e.g. /dev/md0)
 func (m *Manager) GetRAIDInfo(arrayName string) (*RAIDInfo, error) {
-	cmd := exec.Command("sudo", "mdadm", "--detail", arrayName)
+	cmd := exec.Command("mdadm", "--detail", arrayName)
 
 	output, err := cmd.Output()
 	if err != nil {

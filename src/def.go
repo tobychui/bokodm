@@ -9,14 +9,15 @@ import (
 )
 
 const (
-	CSRF_COOKIENAME = "bokofs-csrf"
+	CSRF_COOKIENAME = "bokodm-csrf"
 )
 
 var (
 	/* Start Flags */
-	httpPort = flag.Int("p", 9000, "Port to serve on (Plain HTTP)")
-	devMode  = flag.Bool("dev", false, "Enable development mode")
-	config   = flag.String("c", "./config", "Path to the config folder")
+	httpPort     = flag.Int("p", 9000, "Port to serve on (Plain HTTP)")
+	devMode      = flag.Bool("dev", false, "Enable development mode")
+	config       = flag.String("c", "./config", "Path to the config folder")
+	skipDepCheck = flag.Bool("skip_dep_check", false, "Skip dependency check on startup")
 
 	//serveSecure = flag.Bool("s", false, "Serve HTTPS. Default false")
 

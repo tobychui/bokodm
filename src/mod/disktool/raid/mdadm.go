@@ -36,7 +36,7 @@ type RAIDDevice struct {
 
 // Return the uuid of the disk by its path name (e.g. /dev/sda)
 func (m *Manager) GetDiskUUIDByPath(devicePath string) (string, error) {
-	cmd := exec.Command("sudo", "blkid", devicePath)
+	cmd := exec.Command("blkid", devicePath)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -104,10 +104,10 @@ func (m *Manager) CreateRAIDDevice(devName string, raidName string, raidLevel in
 	allDeviceIds := append(raidDeviceIds, spareDeviceIds...)
 
 	// Build the mdadm command
-	mdadmCommand := fmt.Sprintf("yes | sudo mdadm --create %s --name %s --level=%d --raid-devices=%d --spare-devices=%d %s", devName, raidName, raidLevel, raidDev, spareDevice, strings.Join(allDeviceIds, " "))
+	mdadmCommand := fmt.Sprintf("yes | mdadm --create %s --name %s --level=%d --raid-devices=%d --spare-devices=%d %s", devName, raidName, raidLevel, raidDev, spareDevice, strings.Join(allDeviceIds, " "))
 	if raidLevel == 0 {
 		//raid0 cannot use --spare-device command as there is no failover
-		mdadmCommand = fmt.Sprintf("yes | sudo mdadm --create %s --name %s --level=%d --raid-devices=%d %s", devName, raidName, raidLevel, raidDev, strings.Join(allDeviceIds, " "))
+		mdadmCommand = fmt.Sprintf("yes | mdadm --create %s --name %s --level=%d --raid-devices=%d %s", devName, raidName, raidLevel, raidDev, strings.Join(allDeviceIds, " "))
 	}
 	cmd := exec.Command("bash", "-c", mdadmCommand)
 
@@ -257,7 +257,7 @@ func (m *Manager) FailDisk(mdDevice, diskPath string) error {
 		mdDevice = filepath.Join("/dev/", mdDevice)
 	}
 
-	cmd := exec.Command("sudo", "mdadm", mdDevice, "--fail", diskPath)
+	cmd := exec.Command("mdadm", mdDevice, "--fail", diskPath)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to fail disk: %v", err)
 	}
@@ -275,7 +275,7 @@ func (m *Manager) RemoveDisk(mdDevice, diskPath string) error {
 		mdDevice = filepath.Join("/dev/", mdDevice)
 	}
 
-	cmd := exec.Command("sudo", "mdadm", mdDevice, "--remove", diskPath)
+	cmd := exec.Command("mdadm", mdDevice, "--remove", diskPath)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to remove disk: %v", err)
 	}
@@ -292,7 +292,7 @@ func (m *Manager) AddDisk(mdDevice, diskPath string) error {
 		mdDevice = filepath.Join("/dev/", mdDevice)
 	}
 
-	cmd := exec.Command("sudo", "mdadm", mdDevice, "--add", diskPath)
+	cmd := exec.Command("mdadm", mdDevice, "--add", diskPath)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to add disk: %v", err)
 	}
@@ -305,7 +305,7 @@ func (m *Manager) GrowRAIDDevice(deviceName string) error {
 	deviceName = strings.TrimPrefix(deviceName, "/dev/")
 
 	// Construct the mdadm command
-	cmd := exec.Command("sudo", "mdadm", "--grow", fmt.Sprintf("/dev/%s", deviceName), "--size=max")
+	cmd := exec.Command("mdadm", "--grow", fmt.Sprintf("/dev/%s", deviceName), "--size=max")
 
 	// Execute the command
 	output, err := cmd.CombinedOutput()
