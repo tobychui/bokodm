@@ -112,6 +112,19 @@
         </div>
     </div>
     <div class="ts-divider"></div>
+
+    <!-- Degraded mode / missing-dep notice. Hidden until JS populates it. -->
+    <div id="boko-dep-warning" style="display:none; background: var(--ts-warning-100, #fffbe6); border-bottom: 1px solid var(--ts-warning-400, #ffe58f); padding: 0.6em 0;">
+        <div class="ts-container">
+            <span style="font-weight: 600; color: var(--ts-warning-700, #d48806);">
+                &#9888; <span i18n>Running in Degraded Mode — some features are disabled
+                    // 以降級模式運行 — 部分功能已停用
+                </span>
+            </span>
+            <ul id="boko-dep-missing-list" style="margin: 0.3em 0 0 1.4em; font-size: 0.9em; color: var(--ts-gray-700);"></ul>
+        </div>
+    </div>
+
     <div>
         <div class="boko-panel-component" id="tab-status" component="status.html">Status</div>
         <div class="boko-panel-component" id="tab-connections" component="connections.html">Connections</div>
@@ -162,7 +175,81 @@
             $("#msgbox").stop().finish().fadeOut(200);
         });
         $("#msgbox").hide();
-    
+
+        /* ── Dependency / feature-gating ── */
+
+        // Stored globally so components (e.g. status.html) can read it after
+        // they finish loading.
+        window.bokoDepReport = null;
+
+        /**
+         * applyFeatureGating(report)
+         *
+         * Receives the DependencyReport from /api/info/deps and:
+         *  1. Shows a degraded-mode banner listing every missing dep.
+         *  2. Disables navigation tabs for features whose deps are absent.
+         */
+        function applyFeatureGating(report) {
+            window.bokoDepReport = report;
+
+            var missing = report.deps ? report.deps.filter(function(d){ return !d.found; }) : [];
+
+            if (report.degradedMode || missing.length > 0) {
+                var list = $("#boko-dep-missing-list");
+                list.empty();
+                missing.forEach(function(dep) {
+                    var hints = "";
+                    if (dep.installHints && dep.installHints.length > 0) {
+                        hints = " &nbsp;—&nbsp; <code>" + dep.installHints[0] + "</code>";
+                    }
+                    list.append("<li><b>" + dep.name + "</b>" + hints + " <span style='color:var(--ts-gray-500);'>(" + dep.description + ")</span></li>");
+                });
+
+                // Only show the banner when deps are genuinely missing
+                if (missing.length > 0) {
+                    $("#boko-dep-warning").show();
+                }
+            }
+
+            // Disable tabs for unavailable features.
+            // A feature is "unavailable" when any dep tagged with it is missing.
+            var unavailableFeatures = {};
+            if (report.deps) {
+                report.deps.forEach(function(dep) {
+                    if (!dep.found) {
+                        unavailableFeatures[dep.feature] = true;
+                    }
+                });
+            }
+
+            if (unavailableFeatures["raid"]) {
+                var raidTab = $('[data-tab="tab-raid"]');
+                raidTab.addClass("is-disabled").css("opacity", "0.45").css("cursor", "not-allowed")
+                       .attr("title", "RAID management is unavailable (mdadm not found)");
+                raidTab.off("click").on("click", function(e){ e.stopImmediatePropagation(); return false; });
+            }
+
+            if (unavailableFeatures["disks"]) {
+                var disksTab = $('[data-tab="tab-disks"]');
+                disksTab.addClass("is-disabled").css("opacity", "0.45").css("cursor", "not-allowed")
+                        .attr("title", "Disk enumeration is unavailable");
+                disksTab.off("click").on("click", function(e){ e.stopImmediatePropagation(); return false; });
+            }
+
+            // Fire a custom event so loaded components can react immediately.
+            $(document).trigger("boko:depsloaded", [report]);
+        }
+
+        function loadAndApplyDeps() {
+            $.get("./api/info/deps", function(report) {
+                applyFeatureGating(report);
+            }).fail(function() {
+                console.warn("bokodm: could not fetch dependency report from /api/info/deps");
+            });
+        }
+
+        $(document).ready(function(){ loadAndApplyDeps(); });
+
     </script>
     <script src="./js/locale.js"></script>
 </body>

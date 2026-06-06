@@ -40,6 +40,20 @@
         </div>
         <!-- Disk SMARTs -->
         <div class="has-top-spaced-large is-padded">
+            <!-- Shown when smartctl is not installed -->
+            <div id="smart-unavailable-notice" class="ts-box is-padded" style="display:none; border-left: 4px solid var(--ts-warning-400, #faad14);">
+                <div class="ts-content">
+                    <div class="ts-header is-heavy" i18n>
+                        SMART Monitoring Unavailable
+                        // SMART 監控不可用
+                    </div>
+                    <p i18n>
+                        <code>smartctl</code> was not found on this system. Install <b>smartmontools</b> to enable disk health monitoring.
+                        // 系統中找不到 <code>smartctl</code>。請安裝 <b>smartmontools</b> 以啟用磁碟健康監控。
+                    </p>
+                    <div id="smart-install-hints" style="font-size:0.9em; color: var(--ts-gray-600);"></div>
+                </div>
+            </div>
             <div id="disk-smart-overview" class="ts-grid has-top-spaced-large is-relaxed is-3-columns is-stretched mobile:is-stacked">
                 <div class="column">
                     <div class="ts-content is-rounded is-padded">
@@ -234,7 +248,33 @@
     }
 
 
+    function showSmartUnavailable(depReport) {
+        $("#disk-smart-overview").hide();
+        var notice = $("#smart-unavailable-notice");
+        notice.show();
+        // Populate install hints from the deps report if available
+        var hintsEl = $("#smart-install-hints");
+        hintsEl.empty();
+        if (depReport && depReport.deps) {
+            depReport.deps.forEach(function(dep) {
+                if (dep.name === "smartctl" && dep.installHints && dep.installHints.length > 0) {
+                    hintsEl.append('<p style="margin:0.2em 0 0;">&#128161; <code>' + dep.installHints.join("</code> &nbsp;or&nbsp; <code>") + '</code></p>');
+                }
+            });
+        }
+    }
+
     function initDiskSmartHealthOverview(){
+        // Check whether smartctl was found before making the API call.
+        var depReport = window.bokoDepReport;
+        if (depReport && depReport.deps) {
+            var smartDep = depReport.deps.find(function(d){ return d.name === "smartctl"; });
+            if (smartDep && !smartDep.found) {
+                showSmartUnavailable(depReport);
+                return;
+            }
+        }
+
         $.get("./api/smart/health/all", function(data){
             $("#disk-smart-overview").html("");
             let good_count = 0;
@@ -337,7 +377,15 @@
     }
 
     $(document).ready(function(){
-        initDiskSmartHealthOverview();
+        if (window.bokoDepReport !== null && window.bokoDepReport !== undefined) {
+            // Deps already loaded before this component finished loading.
+            initDiskSmartHealthOverview();
+        } else {
+            // Wait for the deps report to arrive, then initialise.
+            $(document).one("boko:depsloaded", function(){
+                initDiskSmartHealthOverview();
+            });
+        }
     });
    
 </script>

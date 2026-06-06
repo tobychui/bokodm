@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 )
 
 /*
@@ -34,11 +33,6 @@ func PackageExists(packageName string) (bool, error) {
 
 // Create a new raid manager
 func NewRaidManager() (*Manager, error) {
-	//Check if platform is supported
-	if runtime.GOOS != "linux" {
-		return nil, errors.New("ArozOS do not support RAID management on this platform")
-	}
-
 	//Check if mdadm exists
 	mdadmExists, err := PackageExists("mdadm")
 	if err != nil || !mdadmExists {

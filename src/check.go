@@ -1,27 +1,30 @@
 package main
 
-import (
-	"fmt"
-	"os/exec"
-)
+/*
+	check.go
 
-// commandExists checks if a given command exists on the system
+	Runtime environment validation.
+	check_linux.go   — verifies commands required on Linux
+	check_darwin.go  — verifies commands required on macOS
+	check_other.go   — stub for unsupported platforms
+
+	buildDependencyList() is platform-specific and lives in dep_*.go.
+*/
+
+import "os/exec"
+
+// commandExists reports whether cmd is found on the PATH.
 func commandExists(cmd string) bool {
 	_, err := exec.LookPath(cmd)
 	return err == nil
 }
 
-// checkRuntimeEnvironment checks if the required commands are available in the runtime environment
-func checkRuntimeEnvironment() bool {
-	packageMissing := false
-	commands := []string{"ffmpeg", "smartctl", "mdadm", "lsblk", "blkid", "df"}
-	for _, cmd := range commands {
-		if commandExists(cmd) {
-			fmt.Printf("\033[32m✔\033[0m '%s' exists\n", cmd)
-		} else {
-			packageMissing = true
-			fmt.Printf("\033[31m✘\033[0m '%s' does not exist\n", cmd)
-		}
-	}
-	return !packageMissing
+// checkRuntimeEnvironment probes all platform-required external commands,
+// prints coloured status lines (with install hints for missing deps), and
+// returns a DependencyReport that can be served to the frontend.
+//
+// DegradedMode is NOT set here — the caller (start.go) sets it based on
+// the -skip_dep flag after reviewing AllSatisfied.
+func checkRuntimeEnvironment() *DependencyReport {
+	return checkRuntimeEnv()
 }

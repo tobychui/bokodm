@@ -60,6 +60,14 @@ func HandleInfoAPIcalls() http.Handler {
 		pathParts := strings.Split(r.URL.Path, "/")
 		subPath := pathParts[0]
 		switch subPath {
+		case "deps":
+			// Return the runtime dependency report as JSON.
+			// The frontend uses this to gate features that need missing tools.
+			js, _ := json.Marshal(runtimeDeps)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write(js)
+			return
 		case "netstat":
 			// Get the current network statistics
 			netstatBuffer.HandleGetBufferedNetworkInterfaceStats(w, r)

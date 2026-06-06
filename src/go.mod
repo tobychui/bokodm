@@ -12,7 +12,6 @@ require (
 	github.com/oliamb/cutter v0.2.2
 	github.com/oov/psd v0.0.0-20220121172623-5db5eafcecbb
 	github.com/shirou/gopsutil/v4 v4.25.3
-	golang.org/x/net v0.36.0
 )
 
 require (
@@ -23,5 +22,6 @@ require (
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 )

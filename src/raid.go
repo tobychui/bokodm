@@ -17,6 +17,10 @@ import (
 
 func HandleRAIDCalls() http.Handler {
 	return http.StripPrefix("/raid/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if raidManager == nil {
+			http.Error(w, "RAID management is not available on this platform", http.StatusServiceUnavailable)
+			return
+		}
 		pathParts := strings.Split(r.URL.Path, "/")
 
 		switch pathParts[0] {
