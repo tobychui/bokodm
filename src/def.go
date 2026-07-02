@@ -17,6 +17,7 @@ var (
 	httpPort = flag.Int("p", 9000, "Port to serve on (Plain HTTP)")
 	devMode  = flag.Bool("dev", false, "Enable development mode")
 	config   = flag.String("c", "./config", "Path to the config folder")
+	skipDep  = flag.Bool("skip_dep", false, "Start in degraded mode even when required dependencies are missing")
 
 	//serveSecure = flag.Bool("s", false, "Serve HTTPS. Default false")
 
@@ -24,6 +25,9 @@ var (
 	sysuuid        string                          //System UUID (UUIDv4)
 	webfs          http.FileSystem                 //The web filesystem for static files
 	csrfMiddleware func(http.Handler) http.Handler //CSRF protection middleware
+
+	/* Dependency state (populated at startup, served at /api/info/deps) */
+	runtimeDeps *DependencyReport
 
 	/* Modules */
 	netstatBuffer *netstat.NetStatBuffers

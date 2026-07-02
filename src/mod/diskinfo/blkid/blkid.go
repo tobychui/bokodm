@@ -1,123 +1,22 @@
 package blkid
 
 /*
-Package blkid provides functions to retrieve block device information
-Usually this will only return partitions info
+	blkid.go
+
+	Public API for partition identification (UUID, filesystem type, block size).
+	blkid_linux.go   — wraps the `blkid` command (Linux)
+	blkid_darwin.go  — wraps `diskutil info -plist` (macOS)
+	blkid_other.go   — stub for unsupported platforms
 */
 
-import (
-	"bufio"
-	"errors"
-	"os/exec"
-	"regexp"
-	"strconv"
-	"strings"
-)
-
-type BlockDevice struct {
-	Device    string // Device name (e.g., /dev/sda1)
-	UUID      string // UUID of the device
-	BlockSize int    // Block size in bytes
-	Type      string // Type of the device (e.g., ext4, ntfs)
-	PartUUID  string // Partition UUID
-	PartLabel string // Partition label
-}
-
-// GetBlockDevices retrieves block devices using the `blkid` command.
+// GetPartitionIdInfo returns identification info for all partitions visible
+// to the operating system.
 func GetPartitionIdInfo() ([]BlockDevice, error) {
-	//Check if the current user have superuser privileges
-	cmd := exec.Command("id", "-u")
-	userIDOutput, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if the user ID is 0 (root)
-	// If not, run blkid without sudo
-	if strings.TrimSpace(string(userIDOutput)) == "0" {
-		cmd = exec.Command("blkid")
-	} else {
-		cmd = exec.Command("sudo", "blkid")
-	}
-
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	scanner := bufio.NewScanner(strings.NewReader(string(output)))
-	devices := []BlockDevice{}
-	re := regexp.MustCompile(`(\S+):\s+(.*)`)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		matches := re.FindStringSubmatch(line)
-		if len(matches) != 3 {
-			continue
-		}
-
-		device := matches[1]
-		attributes := matches[2]
-		deviceInfo := BlockDevice{Device: device}
-
-		for _, attr := range strings.Split(attributes, " ") {
-			kv := strings.SplitN(attr, "=", 2)
-			if len(kv) != 2 {
-				continue
-			}
-			key := kv[0]
-			value := strings.Trim(kv[1], `"`)
-
-			switch key {
-			case "UUID":
-				deviceInfo.UUID = value
-			case "BLOCK_SIZE":
-				// Convert block size to int if possible
-				blockSize, err := strconv.Atoi(value)
-				if err == nil {
-					deviceInfo.BlockSize = blockSize
-				} else {
-					deviceInfo.BlockSize = 0
-				}
-
-			case "TYPE":
-				deviceInfo.Type = value
-			case "PARTUUID":
-				deviceInfo.PartUUID = value
-			case "PARTLABEL":
-				deviceInfo.PartLabel = value
-			}
-		}
-
-		devices = append(devices, deviceInfo)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	return devices, nil
+	return getPartitionIdInfo()
 }
 
-// GetBlockDeviceIDFromDevicePath retrieves block device information for a given device path.
+// GetPartitionIDFromDevicePath returns partition identification info for the
+// given device path (e.g. "/dev/sda1" or "/dev/disk0s1").
 func GetPartitionIDFromDevicePath(devpath string) (*BlockDevice, error) {
-	devpath = strings.TrimPrefix(devpath, "/dev/")
-	if strings.Contains(devpath, "/") {
-		return nil, errors.New("invalid device path")
-	}
-
-	devpath = "/dev/" + devpath
-
-	devices, err := GetPartitionIdInfo()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, device := range devices {
-		if device.Device == devpath {
-			return &device, nil
-		}
-	}
-
-	return nil, errors.New("device not found")
+	return getPartitionIDFromDevicePath(devpath)
 }

@@ -1,22 +1,23 @@
 package hardwareinfo
 
+/*
+	hardwareinfo.go
+
+	Public API and shared types for hardware information queries.
+	sysinfo_linux.go   — Linux implementation (ip, lscpu, /proc)
+	sysinfo_darwin.go  — macOS implementation (sysctl, system_profiler)
+	sysinfo_other.go   — stubs for unsupported platforms
+*/
+
 import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os/exec"
-	"strings"
 
 	"imuslab.com/bokofs/bokofsd/mod/utils"
 )
 
-/*
-	Hardware Info
-	author: tobychui
-
-	This module is a migrated module from the original system.info.go script
-
-*/
+// ---- Shared types ----
 
 type CPUInfo struct {
 	Model       string
@@ -48,27 +49,10 @@ type Server struct {
 }
 
 func NewInfoServer(a ArOZInfo) *Server {
-	return &Server{
-		hostInfo: a,
-	}
-}
-
-/*
-PrintSystemHardwareDebugMessage print system information on Windows.
-Which is lagging but helpful for debugging wmic on Windows
-*/
-func PrintSystemHardwareDebugMessage() {
-	log.Println("Windows Version: " + wmicGetinfo("os", "Caption")[0])
-	log.Println("Total Memory: " + wmicGetinfo("ComputerSystem", "TotalPhysicalMemory")[0] + "B")
-	log.Println("Processor: " + wmicGetinfo("cpu", "Name")[0])
-	log.Println("Following disk was detected:")
-	for _, info := range wmicGetinfo("diskdrive", "Model") {
-		log.Println(info)
-	}
+	return &Server{hostInfo: a}
 }
 
 func (s *Server) GetArOZInfo(w http.ResponseWriter, r *http.Request) {
-	var jsonData []byte
 	jsonData, err := json.Marshal(s.hostInfo)
 	if err != nil {
 		log.Println(err)
@@ -82,51 +66,32 @@ func (s *Server) GetArOZInfo(w http.ResponseWriter, r *http.Request) {
 		t.VendorIcon = ""
 		jsonData, _ = json.Marshal(t)
 	}
-
 	utils.SendJSONResponse(w, string(jsonData))
 }
 
-func wmicGetinfo(wmicName string, itemName string) []string {
-	//get systeminfo
-	var InfoStorage []string
+// ---- Public HTTP handler wrappers ----
 
-	cmd := exec.Command("chcp", "65001")
-
-	cmd = exec.Command("wmic", wmicName, "list", "full", "/format:list")
-	if wmicName == "os" {
-		cmd = exec.Command("wmic", wmicName, "get", "*", "/format:list")
-	}
-
-	if len(wmicName) > 6 {
-		if wmicName[0:6] == "Win32_" {
-			cmd = exec.Command("wmic", "path", wmicName, "get", "*", "/format:list")
-		}
-	}
-	out, _ := cmd.CombinedOutput()
-	strOut := string(out)
-
-	strSplitedOut := strings.Split(strOut, "\n")
-	for _, strConfig := range strSplitedOut {
-		if strings.Contains(strConfig, "=") {
-			strSplitedConfig := strings.SplitN(strConfig, "=", 2)
-			if strSplitedConfig[0] == itemName {
-				strSplitedConfigReplaced := strings.Replace(strSplitedConfig[1], "\r", "", -1)
-				InfoStorage = append(InfoStorage, strSplitedConfigReplaced)
-			}
-		}
-
-	}
-	if len(InfoStorage) == 0 {
-		InfoStorage = append(InfoStorage, "Undefined")
-	}
-	return InfoStorage
+// Ifconfig returns a JSON list of network-interface output lines.
+func Ifconfig(w http.ResponseWriter, r *http.Request) {
+	sysIfconfig(w, r)
 }
 
-func filterGrepResults(result string, sep string) string {
-	if strings.Contains(result, sep) == false {
-		return result
-	}
-	tmp := strings.Split(result, sep)
-	resultString := tmp[1]
-	return strings.TrimSpace(resultString)
+// GetDriveStat returns a JSON list of mounted filesystem usage.
+func GetDriveStat(w http.ResponseWriter, r *http.Request) {
+	sysGetDriveStat(w, r)
+}
+
+// GetUSB returns a JSON list of connected USB devices.
+func GetUSB(w http.ResponseWriter, r *http.Request) {
+	sysGetUSB(w, r)
+}
+
+// GetCPUInfo returns a JSON CPUInfo object.
+func GetCPUInfo(w http.ResponseWriter, r *http.Request) {
+	sysGetCPUInfo(w, r)
+}
+
+// GetRamInfo returns installed RAM in bytes as a JSON integer.
+func GetRamInfo(w http.ResponseWriter, r *http.Request) {
+	sysGetRamInfo(w, r)
 }

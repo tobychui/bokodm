@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/csrf"
@@ -69,17 +71,28 @@ func initialization() error {
 	}
 	netstatBuffer = nsb
 
-	/* Package Check */
-	if !checkRuntimeEnvironment() {
-		return fmt.Errorf("runtime environment check failed")
+	/* Package / dependency check */
+	report := checkRuntimeEnvironment()
+	if !report.AllSatisfied {
+		if *skipDep {
+			report.DegradedMode = true
+			log.Printf("\033[33m⚠\033[0m  Starting in degraded mode (-skip_dep): one or more required dependencies are missing")
+		} else {
+			return fmt.Errorf("runtime environment check failed: required dependencies are missing (use -skip_dep to start anyway in degraded mode)")
+		}
 	}
+	runtimeDeps = report
 
-	/* RAID Manager */
+	/* RAID Manager — Linux only (mdadm required) */
 	rm, err := raid.NewRaidManager()
 	if err != nil {
-		return err
+		if runtime.GOOS == "linux" && !*skipDep {
+			return fmt.Errorf("RAID manager unavailable: %v", err)
+		}
+		log.Printf("RAID management not available on %s: %v", runtime.GOOS, err)
+	} else {
+		raidManager = rm
 	}
-	raidManager = rm
 
 	/* CSRF Middleware */
 	csrfMiddleware = csrf.Protect(
@@ -98,8 +111,9 @@ func tmplMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		csrfToken := csrf.Token(r)
 
-		// Check if the request is for a path or ends with .html
-		if r.URL.Path == "/" || r.URL.Path[len(r.URL.Path)-5:] == ".html" {
+		// Check if the request is for the root or an HTML page
+		isHTML := len(r.URL.Path) >= 5 && r.URL.Path[len(r.URL.Path)-5:] == ".html"
+		if r.URL.Path == "/" || isHTML {
 			file, err := webfs.Open(r.URL.Path)
 			if err != nil {
 				http.NotFound(w, r)
@@ -116,8 +130,11 @@ func tmplMiddleware(next http.Handler) http.Handler {
 			}
 
 			if fileInfo.IsDir() {
-				// If the file is a directory, try to open /index.html
-				indexFile, err := webfs.Open(r.URL.Path + "/index.html")
+				// Build the index path without a double slash when r.URL.Path is "/".
+				// Trimming the trailing slash gives "" for "/" and "/foo" for "/foo/",
+				// so the result is always "/index.html" or "/foo/index.html".
+				base := strings.TrimRight(r.URL.Path, "/")
+				indexFile, err := webfs.Open(base + "/index.html")
 				if err != nil {
 					http.NotFound(w, r)
 					return
