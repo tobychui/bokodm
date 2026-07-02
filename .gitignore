@@ -26,3 +26,4 @@ go.work.sum
 src/bokofsd
 src/config/sys.uuid
 /src/dist
+.DS_Store
