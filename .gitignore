@@ -23,7 +23,10 @@ go.work.sum
 
 # env file
 .env
-src/bokofsd
+src/bokodmd
 src/config/sys.uuid
 /src/dist
 .DS_Store
+src/logs/
+/src/config
+src/cookies.txt

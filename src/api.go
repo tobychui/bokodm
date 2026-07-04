@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"imuslab.com/bokofs/bokofsd/mod/diskinfo"
-	"imuslab.com/bokofs/bokofsd/mod/diskinfo/lsblk"
-	"imuslab.com/bokofs/bokofsd/mod/netstat"
+	"imuslab.com/bokodm/bokodmd/mod/diskinfo"
+	"imuslab.com/bokodm/bokodmd/mod/diskinfo/lsblk"
+	"imuslab.com/bokodm/bokodmd/mod/netstat"
 )
 
 /*
@@ -46,6 +46,26 @@ func HandlerAPIcalls() http.Handler {
 		case "raid":
 			// Request to /api/raid/*
 			HandleRAIDCalls().ServeHTTP(w, r)
+			return
+		case "netmount":
+			// Request to /api/netmount/*
+			HandleNetMountCalls().ServeHTTP(w, r)
+			return
+		case "disks":
+			// Request to /api/disks/* (partition mount tools)
+			HandleDiskMountCalls().ServeHTTP(w, r)
+			return
+		case "parttool":
+			// Request to /api/parttool/* (partitioning & formatting)
+			HandlePartToolCalls().ServeHTTP(w, r)
+			return
+		case "settings":
+			// Request to /api/settings/*
+			HandleSettingsCalls().ServeHTTP(w, r)
+			return
+		case "logs":
+			// Request to /api/logs/* (log store for the Logs tab)
+			HandleLogsCalls().ServeHTTP(w, r)
 		default:
 			http.Error(w, "Not Found", http.StatusNotFound)
 			return
@@ -68,9 +88,17 @@ func HandleInfoAPIcalls() http.Handler {
 			w.WriteHeader(http.StatusOK)
 			w.Write(js)
 			return
+		case "report":
+			// Generate the full system analytic report
+			HandleAnalyticReport(w, r)
+			return
 		case "netstat":
 			// Get the current network statistics
 			netstatBuffer.HandleGetBufferedNetworkInterfaceStats(w, r)
+			return
+		case "diskio":
+			// Get the live per-disk IO throughput
+			HandleDiskIORates(w, r)
 			return
 		case "iface":
 			// Get the list of network interfaces
@@ -96,6 +124,30 @@ func HandleInfoAPIcalls() http.Handler {
 					}
 					disks = append(disks, disk)
 				}
+			}
+
+			// md RAID volumes are nested under their member disks in the
+			// lsblk tree; surface each assembled array as its own entry so
+			// its partitions can be inspected and mounted like a real disk
+			seenMdDevices := map[string]bool{}
+			var collectMdDevices func(devices []lsblk.BlockDevice)
+			collectMdDevices = func(devices []lsblk.BlockDevice) {
+				for _, device := range devices {
+					if strings.HasPrefix(device.Type, "raid") && strings.HasPrefix(device.Name, "md") && !seenMdDevices[device.Name] {
+						seenMdDevices[device.Name] = true
+						disk, err := diskinfo.GetDiskInfo(device.Name)
+						if err == nil {
+							if disk.Model == "" {
+								disk.Model = "RAID Volume (" + device.Type + ")"
+							}
+							disks = append(disks, disk)
+						}
+					}
+					collectMdDevices(device.Children)
+				}
+			}
+			for _, device := range blockDevices {
+				collectMdDevices(device.Children)
 			}
 			// Convert the block devices to JSON and write it to the response
 			js, _ := json.Marshal(disks)

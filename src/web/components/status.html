@@ -32,7 +32,7 @@
                 <p class="sysstatus_bad" style="display:none;" i18n>All disks are not healthy or failed. Replace the disks as soon as possible.
                     // 所有磁碟都不健康或已損壞。 請儘快更換磁碟。
                 </p>
-                <a href="#!" class="ts-button is-outlined" style="color: var(--ts-gray-50)" i18n>
+                <a href="./report.html" target="_blank" class="ts-button is-outlined" style="color: var(--ts-gray-50)" i18n>
                     Analytics Report
                     // 分析報告
                 </a>
@@ -70,7 +70,7 @@
                     </div>
                 </div>
             </div>
-        </div>  
+        </div>
 
         <!-- Network IO -->
         <div class="ts-box has-top-spaced-large is-rounded is-padded ">
@@ -102,6 +102,18 @@
             
             </div>
         </div>  
+
+        <!-- Disk IO -->
+        <div class="ts-box has-top-spaced-large is-rounded is-padded">
+            <div class="ts-content">
+                <div class="ts-header" i18n>Real-time Disk IO
+                    // 即時磁碟讀寫
+                </div>
+                <div id="diskio-list" class="has-top-spaced">
+                    <span class="ts-icon is-spinning is-circle-notch-icon"></span>
+                </div>
+            </div>
+        </div>
 
         <!-- Network Interface -->
         <div class="has-top-spaced-large is-padded">
@@ -164,7 +176,52 @@
     // Call the function to populate the table initially
     updateNetworkInterfaceTable();
 
-    /*  SMART DISK HEALTH STATUS */
+    /*  SMART DISK HEALTH OVERVIEW — cards link to the SMART tab for details */
+
+    function evaluateDriveHealth(info) {
+        if (!info) return 'unknown';
+
+        // Shortcut for IsHealthy flag from backend
+        if (!info.IsHealthy) return 'not_healthy';
+
+        // Thresholds based on SMART data experience
+        const thresholds = {
+            reallocated: 10,         // more than 10 sectors or blocks is a red flag
+            pending: 1,              // any pending sectors is worrying
+            uncorrectable: 1,        // same
+            udmaCrc: 10,             // interface problems
+            wearLevel: 1000,         // beyond this, flash wear is a concern
+        };
+
+        let issues = 0;
+
+        if (info.ReallocatedSectors > thresholds.reallocated ||
+            info.ReallocateNANDBlocks > thresholds.reallocated) {
+            if (info.ReallocatedSectors > thresholds.reallocated * 3) {
+                return 'not_healthy';
+            }
+            issues++;
+        }
+
+        if (info.PendingSectors >= thresholds.pending) issues++;
+        if (info.UncorrectableErrors >= thresholds.uncorrectable) issues++;
+        if (info.UDMACRCErrors >= thresholds.udmaCrc) issues++;
+        if (info.WearLevelingCount >= thresholds.wearLevel) issues++;
+
+        // SSDs may silently degrade with increasing wear even if no reallocation yet
+        if (info.IsSSD && info.WearLevelingCount > 0 && info.WearLevelingCount < 100) {
+            return 'attention';
+        }
+
+        if (issues === 0) {
+            return 'healthy';
+        } else if (issues === 1) {
+            return 'attention';
+        } else {
+            return 'not_healthy';
+        }
+    }
+
     // Function to format power-on hours into a human-readable format
     function formatPowerOnHours(hours) {
         const hoursInDay = 24;
@@ -194,60 +251,6 @@
         }
     }
 
-    // Function to format power-on hours into a human-readable format
-    function evaluateDriveHealth(info) {
-        if (!info) return 'unknown';
-
-        // Shortcut for IsHealthy flag from backend
-        if (!info.IsHealthy) return 'not_healthy';
-
-        // Thresholds based on SMART data experience
-        const thresholds = {
-            reallocated: 10,         // more than 10 sectors or blocks is a red flag
-            pending: 1,              // any pending sectors is worrying
-            uncorrectable: 1,        // same
-            udmaCrc: 10,             // interface problems
-            powerCycleHigh: 1000,    // maybe indicates hardware or power issues
-            wearLevel: 1000,         // beyond this, flash wear is a concern
-        };
-
-        let issues = 0;
-
-        if (info.ReallocatedSectors > thresholds.reallocated ||
-            info.ReallocateNANDBlocks > thresholds.reallocated) {
-            // Reallocated sectors or blocks
-            if (info.ReallocatedSectors > thresholds.reallocated * 3) {
-                return 'not_healthy';
-            }
-            issues++;
-            
-        }
-
-        if (info.PendingSectors >= thresholds.pending) issues++;
-        if (info.UncorrectableErrors >= thresholds.uncorrectable) issues++;
-        if (info.UDMACRCErrors >= thresholds.udmaCrc) issues++;
-
-        if (info.WearLevelingCount >= thresholds.wearLevel) issues++;
-
-        // SSDs may silently degrade with increasing wear even if no reallocation yet
-        if (info.IsSSD && info.WearLevelingCount > 0 && info.WearLevelingCount < 100) {
-            return 'attention';
-        }
-
-        if (issues === 0) {
-            return 'healthy';
-        } else if (issues === 1) {
-            return 'attention';
-        } else {
-            return 'not_healthy';
-        }
-    }
-
-    function getOverallSystemHealth(){
-
-    }
-
-
     function showSmartUnavailable(depReport) {
         $("#disk-smart-overview").hide();
         var notice = $("#smart-unavailable-notice");
@@ -264,6 +267,19 @@
         }
     }
 
+    // Jump to the SMART tab with the given disk selected
+    function jumpToSmartTab(diskName){
+        $('#main_menu .item[data-tab="tab-smart"]').click();
+        if (typeof(showSmartTabDetail) != "undefined" && window.smartTabHealthList !== undefined && smartTabHealthList.length > 0){
+            showSmartTabDetail(diskName);
+        }else if (typeof(smartTabSelectedDisk) != "undefined"){
+            // SMART tab not initialised yet, it will pick this disk up on load
+            smartTabSelectedDisk = diskName;
+        }
+    }
+
+    // Fetch the SMART health of all disks, render the overview cards and
+    // update the overall status banner at the top of the page
     function initDiskSmartHealthOverview(){
         // Check whether smartctl was found before making the API call.
         var depReport = window.bokoDepReport;
@@ -306,13 +322,13 @@
 
                 let poweronDuration = formatPowerOnHours(disk.PowerOnHours);
                 $("#disk-smart-overview").append(`<div class="column">
-                    <div class="ts-box ts-content is-rounded is-padded" style="${tsBoxExtraCss}">
+                    <div class="ts-box ts-content is-rounded is-padded" style="cursor: pointer; ${tsBoxExtraCss}" onclick="jumpToSmartTab('${disk.DeviceName}');" title="View SMART details">
                         <div class="ts-header is-truncated is-heavy">
                             ${disk.DeviceModel}
                         </div>
                         <div class="ts-text has-top-spaced-small">
-                            <span class="ts-badge">/dev/${disk.DeviceName}</span> 
-                            <span class="ts-badge">${disk.SerialNumber}</span> 
+                            <span class="ts-badge">/dev/${disk.DeviceName}</span>
+                            <span class="ts-badge">${disk.SerialNumber}</span>
                         </div>
                         <div class="ts-grid is-evenly-divided has-top-spaced-large">
                             <div class="column">
@@ -357,12 +373,12 @@
             }
 
             // Update the overall system health status
-            if (bad_count == data.length || bad_count + attention_count == data.length){
+            if (data.length > 0 && (bad_count == data.length || bad_count + attention_count == data.length)){
                 //All disks are bad
                 $(".sysstatus_bad").show();
                 $(".sysstatus_attention").hide();
                 $(".sysstatus_good").hide();
-            }else if (bad_count > 0){
+            }else if (bad_count > 0 || attention_count > 0){
                 $(".sysstatus_bad").hide();
                 $(".sysstatus_attention").show();
                 $(".sysstatus_good").hide();
@@ -387,6 +403,88 @@
             });
         }
     });
+
+    /* ── Real-time Disk IO monitor ── */
+
+    function formatIOSpeed(bps){
+        const KB = 1024, MB = 1024 * KB, GB = 1024 * MB;
+        if (bps >= GB){ return (bps / GB).toFixed(1) + " GB/s"; }
+        if (bps >= MB){ return (bps / MB).toFixed(1) + " MB/s"; }
+        if (bps >= KB){ return (bps / KB).toFixed(1) + " kB/s"; }
+        return bps + " B/s";
+    }
+
+    // Create or update one row per disk so the list does not flicker
+    function updateDiskIOList(rates){
+        let container = $("#diskio-list");
+        if (container.find(".diskio-row").length == 0 && container.find(".diskio-empty").length == 0){
+            container.empty();
+        }
+        if (!Array.isArray(rates) || rates.length == 0){
+            if (container.find(".diskio-empty").length == 0){
+                container.html('<span class="ts-text is-description diskio-empty">No disk activity data available</span>');
+            }
+            return;
+        }
+
+        // Bar scale: at least 10 MB/s so idle disks do not fill the bar
+        let maxRate = 10 * 1024 * 1024;
+        rates.forEach(function(rate){
+            maxRate = Math.max(maxRate, rate.readBps, rate.writeBps);
+        });
+
+        rates.sort(function(a, b){ return a.name < b.name ? -1 : 1; });
+        rates.forEach(function(rate){
+            let row = container.find(`.diskio-row[diskname="${rate.name}"]`);
+            if (row.length == 0){
+                container.find(".diskio-empty").remove();
+                container.append(`<div class="diskio-row has-top-spaced-small" diskname="${rate.name}">
+                    <div class="ts-grid is-middle-aligned">
+                        <div class="column is-3-wide">
+                            <span class="ts-text is-heavy">/dev/${rate.name}</span>
+                        </div>
+                        <div class="column is-fluid">
+                            <div class="ts-grid is-2-columns">
+                                <div class="column">
+                                    <div class="ts-text is-tiny">
+                                        <i class="ts-icon is-circle-down-icon" style="color: #1890ff;"></i>
+                                        <span i18n>Read // 讀取</span>: <span class="diskio-read-text">0 B/s</span>
+                                    </div>
+                                    <div class="ts-progress is-tiny has-top-spaced-small">
+                                        <div class="bar diskio-read-bar" style="--value: 0"></div>
+                                    </div>
+                                </div>
+                                <div class="column">
+                                    <div class="ts-text is-tiny">
+                                        <i class="ts-icon is-circle-up-icon" style="color: #52c41a;"></i>
+                                        <span i18n>Write // 寫入</span>: <span class="diskio-write-text">0 B/s</span>
+                                    </div>
+                                    <div class="ts-progress is-tiny has-top-spaced-small">
+                                        <div class="bar diskio-write-bar" style="--value: 0"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`);
+                row = container.find(`.diskio-row[diskname="${rate.name}"]`);
+                relocale();
+            }
+            row.find(".diskio-read-text").text(formatIOSpeed(rate.readBps));
+            row.find(".diskio-write-text").text(formatIOSpeed(rate.writeBps));
+            row.find(".diskio-read-bar").css("--value", Math.min(100, rate.readBps / maxRate * 100).toFixed(1));
+            row.find(".diskio-write-bar").css("--value", Math.min(100, rate.writeBps / maxRate * 100).toFixed(1));
+        });
+    }
+
+    function fetchDiskIO(){
+        $.get("./api/info/diskio", function(data){
+            if (data.error != undefined){ return; }
+            updateDiskIOList(data);
+        });
+    }
+    fetchDiskIO();
+    setInterval(fetchDiskIO, 1500);
    
 </script>
 

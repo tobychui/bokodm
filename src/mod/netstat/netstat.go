@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/shirou/gopsutil/v4/net"
-	"imuslab.com/bokofs/bokofsd/mod/utils"
+	"imuslab.com/bokodm/bokodmd/mod/utils"
 )
 
 // Float stat store the change of RX and TX

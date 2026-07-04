@@ -1,0 +1,227 @@
+<div class="ts-content">
+    <div class="ts-container is-padded">
+        <!-- Shown when smartctl is not installed -->
+        <div id="smart-tab-unavailable" class="ts-box is-padded" style="display:none; border-left: 4px solid var(--ts-warning-400, #faad14);">
+            <div class="ts-content">
+                <div class="ts-header is-heavy" i18n>
+                    SMART Monitoring Unavailable
+                    // SMART 監控不可用
+                </div>
+                <p i18n>
+                    <code>smartctl</code> was not found on this system. Install <b>smartmontools</b> to enable disk health monitoring.
+                    // 系統中找不到 <code>smartctl</code>。請安裝 <b>smartmontools</b> 以啟用磁碟健康監控。
+                </p>
+                <div id="smart-tab-install-hints" style="font-size:0.9em; color: var(--ts-gray-600);"></div>
+            </div>
+        </div>
+
+        <div id="smart-tab-main" class="ts-grid mobile:is-stacked">
+            <!-- Disk selector -->
+            <div class="column is-5-wide">
+                <div class="ts-text is-label has-bottom-spaced-small" i18n>Disks
+                    // 磁碟
+                </div>
+                <div id="smart_disk_list" class="ts-menu is-separated">
+                    <div class="ts-blankslate" style="pointer-events: none; user-select: none; opacity: 0.7;">
+                        <div class="description">
+                            <span class="ts-icon is-circle-notch-icon is-spinning"></span>
+                            <span class="has-start-spaced-small">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="ts-divider has-top-spaced-small"></div>
+                <div class="ts-content is-center-aligned">
+                    <button onclick="initSmartTab();" class="ts-button is-start-icon is-circular">
+                        <span class="ts-icon is-rotate-icon"></span>
+                        <span i18n>Refresh
+                            // 重新整理
+                        </span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- SMART detail -->
+            <div class="column is-fluid">
+                <div id="smart_disk_detail">
+                    <div class="ts-blankslate">
+                        <span class="ts-icon is-heart-pulse-icon"></span>
+                        <div class="description" i18n>Select a disk on the left to view its SMART health details.
+                            // 從左側選擇磁碟以檢視其 SMART 健康詳細資訊。
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    var smartTabHealthList = [];
+    var smartTabSelectedDisk = null;
+
+    // Same heuristics as the status page overall health calculation
+    function smartTabEvaluate(info) {
+        if (!info) return 'unknown';
+        if (!info.IsHealthy) return 'not_healthy';
+        let issues = 0;
+        if (info.ReallocatedSectors > 10 || info.ReallocateNANDBlocks > 10) {
+            if (info.ReallocatedSectors > 30) return 'not_healthy';
+            issues++;
+        }
+        if (info.PendingSectors >= 1) issues++;
+        if (info.UncorrectableErrors >= 1) issues++;
+        if (info.UDMACRCErrors >= 10) issues++;
+        if (info.WearLevelingCount >= 1000) issues++;
+        if (info.IsSSD && info.WearLevelingCount > 0 && info.WearLevelingCount < 100) return 'attention';
+        if (issues === 0) return 'healthy';
+        if (issues === 1) return 'attention';
+        return 'not_healthy';
+    }
+
+    function smartTabStateIcon(state){
+        if (state == "healthy"){
+            return '<span class="ts-icon is-circle-check-icon" style="color: var(--ts-positive-500); font-size: 2em;"></span>';
+        }else if (state == "attention"){
+            return '<span class="ts-icon is-circle-exclamation-icon" style="color: var(--ts-warning-500); font-size: 2em;"></span>';
+        }else if (state == "not_healthy"){
+            return '<span class="ts-icon is-circle-xmark-icon" style="color: var(--ts-negative-500); font-size: 2em;"></span>';
+        }
+        return '<span class="ts-icon is-circle-question-icon" style="color: var(--ts-gray-500); font-size: 2em;"></span>';
+    }
+
+    function smartTabShowUnavailable(){
+        $("#smart-tab-main").hide();
+        $("#smart-tab-unavailable").show();
+        var report = window.bokoDepReport;
+        if (report && report.deps){
+            var dep = report.deps.find(function(d){ return d.name === "smartctl"; });
+            if (dep && dep.installHints && dep.installHints.length > 0){
+                $("#smart-tab-install-hints").html('&#128161; <code>' + dep.installHints.join("</code> &nbsp;or&nbsp; <code>") + '</code>');
+            }
+        }
+    }
+
+    function initSmartTab(){
+        var report = window.bokoDepReport;
+        if (report && report.deps){
+            var smartDep = report.deps.find(function(d){ return d.name === "smartctl"; });
+            if (smartDep && !smartDep.found){
+                smartTabShowUnavailable();
+                return;
+            }
+        }
+
+        $.get("./api/smart/health/all", function(data){
+            if (data.error != undefined){
+                msgbox("Error: " + data.error);
+                return;
+            }
+            smartTabHealthList = data;
+            let list = $("#smart_disk_list");
+            list.empty();
+            if (data.length == 0){
+                list.append(`<div class="ts-blankslate" style="pointer-events: none; user-select: none; opacity: 0.7;">
+                    <div class="description" i18n>No SMART capable disk found
+                        // 找不到支援 SMART 的磁碟
+                    </div>
+                </div>`);
+                $("#smart_disk_detail").html("");
+                relocale();
+                return;
+            }
+            data.forEach(function(disk){
+                let state = smartTabEvaluate(disk);
+                list.append(`<a class="item smart-disk-item" devname="${disk.DeviceName}" onclick="showSmartTabDetail('${disk.DeviceName}');">
+                    ${smartTabStateIcon(state)}
+                    <div class="ts-content is-dense" style="min-width: 0;">
+                        <div>
+                            <span class="ts-text is-heavy">${disk.DeviceModel}</span>
+                        </div>
+                        <div class="ts-text is-tiny has-top-spaced-small">/dev/${disk.DeviceName}</div>
+                    </div>
+                </a>`);
+            });
+
+            // Restore previous selection or select the first disk
+            let target = data.find(function(d){ return d.DeviceName == smartTabSelectedDisk; });
+            showSmartTabDetail(target ? target.DeviceName : data[0].DeviceName);
+            relocale();
+        });
+    }
+
+    function smartTabRow(key, value){
+        if (value === undefined || value === null || value === "") { value = "-"; }
+        return `<tr><td style="font-weight:600; width: 40%;">${key}</td><td>${value}</td></tr>`;
+    }
+
+    function showSmartTabDetail(diskName){
+        smartTabSelectedDisk = diskName;
+        $(".smart-disk-item").removeClass("is-active");
+        $(`.smart-disk-item[devname="${diskName}"]`).addClass("is-active");
+
+        let info = smartTabHealthList.find(function(d){ return d.DeviceName == diskName; });
+        if (!info){ return; }
+
+        let state = smartTabEvaluate(info);
+        let stateBadge = '<span class="ts-badge">UNKNOWN</span>';
+        if (state == "healthy"){ stateBadge = '<span class="ts-badge is-positive" style="margin-left:0.6em;">HEALTHY</span>'; }
+        else if (state == "attention"){ stateBadge = '<span class="ts-badge is-warning" style="margin-left:0.6em;">ATTENTION</span>'; }
+        else if (state == "not_healthy"){ stateBadge = '<span class="ts-badge is-negative" style="margin-left:0.6em;">NOT HEALTHY</span>'; }
+
+        let mediaType = info.IsNVMe ? "NVMe" : (info.IsSSD ? "SSD" : "HDD");
+
+        $("#smart_disk_detail").html(`
+            <div class="ts-box">
+                <div class="ts-content is-padded">
+                    <div class="ts-header is-heavy">
+                        ${info.DeviceModel} ${stateBadge}
+                    </div>
+                    <div class="ts-text is-description">
+                        <span class="ts-badge is-secondary">/dev/${info.DeviceName}</span>
+                        <span class="ts-badge is-secondary">${info.SerialNumber}</span>
+                        <span class="ts-badge is-secondary">${mediaType}</span>
+                    </div>
+                    <table class="ts-table is-dense has-top-spaced-large">
+                        <tbody id="smart_tab_rows"></tbody>
+                    </table>
+                </div>
+            </div>
+        `);
+
+        let tbody = $("#smart_tab_rows");
+        tbody.append(smartTabRow("Overall Health", info.IsHealthy
+            ? '<span class="ts-badge is-positive">PASSED</span>'
+            : '<span class="ts-badge is-negative">FAILING</span>'));
+        tbody.append(smartTabRow("Power-on Hours", info.PowerOnHours + " hours"));
+        tbody.append(smartTabRow("Power Cycles", info.PowerCycleCount));
+        tbody.append(smartTabRow("Reallocated Sectors", info.ReallocatedSectors));
+        tbody.append(smartTabRow("Reallocated NAND Blocks", info.ReallocateNANDBlocks));
+        tbody.append(smartTabRow("Wear Leveling Count", info.WearLevelingCount));
+        tbody.append(smartTabRow("Pending Sectors", info.PendingSectors));
+        tbody.append(smartTabRow("Uncorrectable Errors", info.UncorrectableErrors));
+        tbody.append(smartTabRow("ECC Recovered", info.ECCRecovered));
+        tbody.append(smartTabRow("UDMA CRC Errors", info.UDMACRCErrors));
+        tbody.append(smartTabRow("Total LBA Written", info.TotalLBAWritten));
+        tbody.append(smartTabRow("Total LBA Read", info.TotalLBARead));
+
+        // Append the device identity block asynchronously
+        $.get("./api/smart/info/" + diskName, function(identity){
+            if (identity.error != undefined){ return; }
+            Object.keys(identity).forEach(function(key){
+                let value = identity[key];
+                if (typeof value === "boolean"){ value = value ? "Yes" : "No"; }
+                let label = key.replace(/([a-z])([A-Z])/g, "$1 $2");
+                tbody.append(smartTabRow(label, value));
+            });
+        });
+    }
+
+    $(document).ready(function(){
+        if (window.bokoDepReport !== null && window.bokoDepReport !== undefined) {
+            initSmartTab();
+        } else {
+            $(document).one("boko:depsloaded", function(){
+                initSmartTab();
+            });
+        }
+    });
+</script>

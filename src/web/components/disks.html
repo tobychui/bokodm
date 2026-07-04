@@ -17,7 +17,46 @@
             </button>
         </div>
     </div>
-</div>  
+
+    <!-- Partition Unmount Warning -->
+    <dialog id="disk_unmount_warning" class="ts-modal">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header" i18n>Confirm unmount partition?
+                    // 確認卸載分割區？
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content">
+                <div class="ts-text is-description">
+                    <span class="ts-text is-code" id="disk_unmount_target"></span><br>
+                    <span i18n>Make sure no application is using files on this partition before unmounting.
+                        // 卸載前請確認沒有應用程式正在使用此分割區上的檔案。
+                    </span>
+                </div>
+                <div id="disk_unmount_sysdisk_warning" class="ts-notice is-negative has-top-spaced-small" style="display:none;">
+                    <div class="title" i18n>System Disk Warning
+                        // 系統磁碟警告
+                    </div>
+                    <div class="content" i18n>This partition is located on the disk that runs the operating system. Unmounting it may break system services that depend on it. Proceed only if you know what you are doing.
+                        // 此分割區位於執行作業系統的磁碟上。卸載它可能會破壞依賴該分割區的系統服務。請確定您知道自己在做什麼再繼續。
+                    </div>
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-negative" onclick="confirmUnmountPartition();" i18n>Confirm
+                        // 確認
+                    </button>
+                    <button class="ts-button" onclick="$('#disk_unmount_warning')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+</div>
 <script>
     let hostDiskInfo = {
         "disks": []
@@ -58,6 +97,34 @@
                     //Render the partition dom elements
                     for (var j = 0; j < disk.partitions.length; j++) {
                         let partition = disk.partitions[j];
+
+                        //Mount / unmount tool buttons for this partition
+                        let isMounted = partition.mountpoint != undefined && partition.mountpoint != "";
+                        let isSystemPartition = partition.mountpoint == "/" || (partition.mountpoint || "").startsWith("/boot") || partition.mountpoint == "[SWAP]";
+                        let mountToolBtn = "";
+                        if (!isMounted){
+                            mountToolBtn = `<button class="ts-button is-fluid is-start-icon is-positive" onclick="startMountPartition('${partition.name}');">
+                                    <span class="ts-icon is-link-icon" style="color: var(--ts-positive-500);"></span>
+                                    <span i18n>Mount
+                                        // 掛載
+                                    </span>
+                                </button>`;
+                        }else if (!isSystemPartition){
+                            mountToolBtn = `<button class="ts-button is-fluid is-start-icon" onclick="showUnmountPartitionWarning('${partition.name}', '${partition.mountpoint}');">
+                                    <span class="ts-icon is-link-slash-icon"></span>
+                                    <span i18n>Unmount
+                                        // 卸載
+                                    </span>
+                                </button>`;
+                        }else{
+                            mountToolBtn = `<button class="ts-button is-fluid is-start-icon" disabled title="System partition cannot be unmounted">
+                                    <span class="ts-icon is-lock-icon"></span>
+                                    <span i18n>System Partition
+                                        // 系統分割區
+                                    </span>
+                                </button>`;
+                        }
+
                         partitionDOM += `<div id="diskinfo_partition_${partition.name}" class="ts-box has-top-spaced-small">
                                             <div class="ts-content">
                                                 <div class="ts-header">${partition.name}</div>
@@ -88,6 +155,9 @@
                                                                 </div>
                                                             ${humanFileSize(partition.used)} / ${humanFileSize(partition.size)}
                                                             </div>
+                                                        </div>
+                                                        <div class="has-top-spaced">
+                                                            ${mountToolBtn}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -146,6 +216,79 @@
         });
     }
     loadDiskInfo();
+
+    /* Partition mount tool */
+
+    // Opens the shared folder picker, then mounts the partition on the
+    // selected host folder
+    function startMountPartition(partitionName){
+        pickFolder(function(mountPoint){
+            showLoading("Mounting partition...");
+            $.cjax({
+                url: "./api/disks/mount",
+                method: "POST",
+                data: { partition: partitionName, mountPoint: mountPoint },
+                complete: function(){ hideLoading(); },
+                success: function(data){
+                    if (data.error != undefined){
+                        msgbox("Error: " + data.error);
+                    }else{
+                        msgbox(i18nc("disk_mounted_succ"));
+                        setTimeout(loadDiskInfo, 300);
+                    }
+                }
+            });
+        }, "/mnt");
+    }
+
+    // Returns true when the given partition lives on the disk that hosts
+    // the operating system (i.e. the disk holding / or /boot)
+    function partitionIsOnSystemDisk(partitionName){
+        let onSystemDisk = false;
+        hostDiskInfo.disks.forEach(function(disk){
+            let diskHostsSystem = disk.partitions.some(function(p){
+                return p.mountpoint == "/" || (p.mountpoint || "").startsWith("/boot");
+            });
+            if (!diskHostsSystem){ return; }
+            if (disk.partitions.some(function(p){ return p.name == partitionName; })){
+                onSystemDisk = true;
+            }
+        });
+        return onSystemDisk;
+    }
+
+    function showUnmountPartitionWarning(partitionName, mountPoint){
+        $("#disk_unmount_target").text("/dev/" + partitionName + " (" + mountPoint + ")");
+        $("#disk_unmount_warning").attr("partition", partitionName);
+        // Extra warning when unmounting a sibling partition of the OS
+        // partition (e.g. sda2 while sda3 is /)
+        if (partitionIsOnSystemDisk(partitionName)){
+            $("#disk_unmount_sysdisk_warning").show();
+        }else{
+            $("#disk_unmount_sysdisk_warning").hide();
+        }
+        $("#disk_unmount_warning")[0].showModal();
+    }
+
+    function confirmUnmountPartition(){
+        let partitionName = $("#disk_unmount_warning").attr("partition");
+        $("#disk_unmount_warning")[0].close();
+        showLoading("Unmounting partition...");
+        $.cjax({
+            url: "./api/disks/unmount",
+            method: "POST",
+            data: { partition: partitionName },
+            complete: function(){ hideLoading(); },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("disk_unmounted_succ"));
+                    setTimeout(loadDiskInfo, 300);
+                }
+            }
+        });
+    }
 
     /* extern functions */
 

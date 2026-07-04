@@ -5,7 +5,7 @@ import (
 	"net"
 	"net/http"
 
-	"imuslab.com/bokofs/bokofsd/mod/utils"
+	"imuslab.com/bokodm/bokodmd/mod/utils"
 )
 
 type NetworkInterface struct {

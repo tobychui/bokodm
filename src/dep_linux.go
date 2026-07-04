@@ -29,6 +29,15 @@ var linuxPackageNames = map[string]string{
 	"lsblk":    "util-linux",
 	"blkid":    "util-linux",
 	"df":       "coreutils",
+	// Filesystem drivers (optional)
+	"ntfs-3g": "ntfs-3g",
+	// Partitioning (optional)
+	"parted": "parted",
+	// Network filesystem mount helpers (all optional)
+	"mount.davfs": "davfs2",
+	"curlftpfs":   "curlftpfs",
+	"mount.cifs":  "cifs-utils",
+	"mount.nfs":   "nfs-common",
 }
 
 func detectLinuxPackageManager() (binTemplate string, found bool) {
@@ -90,6 +99,48 @@ func buildDependencyList() []Dependency {
 			Feature:      "disks",
 			Description:  "Disk usage statistics",
 			InstallHints: makeLinuxHints("df"),
+		},
+		{
+			Name:         "ntfs-3g",
+			Required:     false,
+			Feature:      "ntfs",
+			Description:  "NTFS filesystem mounting / formatting",
+			InstallHints: makeLinuxHints("ntfs-3g"),
+		},
+		{
+			Name:         "parted",
+			Required:     false,
+			Feature:      "parttool",
+			Description:  "Disk partitioning and partition table editing",
+			InstallHints: makeLinuxHints("parted"),
+		},
+		{
+			Name:         "mount.davfs",
+			Required:     false,
+			Feature:      "netmount",
+			Description:  "WebDAV network filesystem mounting",
+			InstallHints: makeLinuxHints("mount.davfs"),
+		},
+		{
+			Name:         "curlftpfs",
+			Required:     false,
+			Feature:      "netmount",
+			Description:  "FTP network filesystem mounting",
+			InstallHints: makeLinuxHints("curlftpfs"),
+		},
+		{
+			Name:         "mount.cifs",
+			Required:     false,
+			Feature:      "netmount",
+			Description:  "SMB / CIFS network filesystem mounting",
+			InstallHints: makeLinuxHints("mount.cifs"),
+		},
+		{
+			Name:         "mount.nfs",
+			Required:     false,
+			Feature:      "netmount",
+			Description:  "NFS network filesystem mounting",
+			InstallHints: makeLinuxHints("mount.nfs"),
 		},
 	}
 }

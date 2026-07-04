@@ -279,6 +279,10 @@
 
                 for (var i = 0; i < disks.length; i++) {
                     let disk = disks[i];
+                    if (disk.name.startsWith("md")){
+                        //RAID volumes cannot be members of another array
+                        continue;
+                    }
                     let partitionTable = "";
                     let encodedDiskInfo = encodeURIComponent(JSON.stringify(disk));
                     let diskIsMounted = false;
@@ -343,9 +347,14 @@
                     diskList.append(`<div class="ts-box ts-content has-top-spaced-small new-raid-disk-info ${warningClass} ${disabledClass}" data-disk-info='${encodedDiskInfo}'>
                                         ${diskIsMounted ? warningMessage : ""}
                                         <div class="ts-item">
-                                            <div class="ts-header">${disk.model} <span class="ts-badge has-start-spaced-small">${humanFileSize(disk.size)}</span></div>
-                                            <div class="ts-text is-description">
-                                                /dev/${disk.name}
+                                            <div class="ts-wrap is-middle-aligned">
+                                                <img src="./img/icons/drive.svg" style="width: 3em; height: 3em; object-fit: contain;">
+                                                <div>
+                                                    <div class="ts-header">${disk.model} <span class="ts-badge has-start-spaced-small">${humanFileSize(disk.size)}</span></div>
+                                                    <div class="ts-text is-description">
+                                                        /dev/${disk.name}
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                         <div class="has-top-spaced-small">

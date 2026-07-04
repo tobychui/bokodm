@@ -1,11 +1,17 @@
 package utils
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
+
+	"imuslab.com/bokodm/bokodmd/mod/logger"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +23,21 @@ import (
 	Some commonly used functions in ArozOS
 
 */
+
+// RunAndStream runs the command like CombinedOutput but additionally
+// mirrors everything the tool prints to this process stdout, so progress
+// of long-running system tools (mkfs, mdadm, parted...) shows up in the
+// server console in real time. The command and its output are also
+// recorded in the log store so they can be reviewed in the Logs tab.
+func RunAndStream(cmd *exec.Cmd) ([]byte, error) {
+	var buf bytes.Buffer
+	sink := io.MultiWriter(os.Stdout, &buf)
+	cmd.Stdout = sink
+	cmd.Stderr = sink
+	err := cmd.Run()
+	logger.LogCommand(cmd.Args, buf.String(), err)
+	return buf.Bytes(), err
+}
 
 // Response related
 func SendTextResponse(w http.ResponseWriter, msg string) {
@@ -31,7 +52,14 @@ func SendJSONResponse(w http.ResponseWriter, json string) {
 
 func SendErrorResponse(w http.ResponseWriter, errMsg string) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte("{\"error\":\"" + errMsg + "\"}"))
+	// Marshal properly: error text from system tools can contain newlines
+	// and quotes which would otherwise break the JSON and make the
+	// frontend drop the message silently
+	js, err := json.Marshal(map[string]string{"error": errMsg})
+	if err != nil {
+		js = []byte(`{"error":"internal error"}`)
+	}
+	w.Write(js)
 }
 
 func SendOK(w http.ResponseWriter) {

@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"imuslab.com/bokofs/bokofsd/mod/diskinfo"
+	"imuslab.com/bokodm/bokodmd/mod/diskinfo"
 )
 
 // getDiskType inspects `smartctl -i` output to determine disk type.

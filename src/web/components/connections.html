@@ -1,0 +1,688 @@
+<style>
+    .netmount-conn-badge{
+        margin-top: -3px !important;
+        margin-left: 0.15em !important;
+    }
+    .netmount-details{
+        position: relative;
+    }
+</style>
+<div class="ts-content">
+    <div class="ts-container is-padded">
+        <!-- Missing tools notice, populated from /api/netmount/tools -->
+        <div id="netmount-tool-warning" class="ts-box is-padded has-bottom-spaced-large" style="display:none; border-left: 4px solid var(--ts-warning-400, #faad14);">
+            <div class="ts-content">
+                <div class="ts-header is-heavy" i18n>
+                    Some network filesystem tools are missing
+                    // 缺少部分網路檔案系統工具
+                </div>
+                <p i18n>
+                    The protocols below cannot be mounted until the corresponding package is installed. All other features keep working.
+                    // 安裝對應套件之前，無法掛載以下通訊協定。其他功能不受影響。
+                </p>
+                <ul id="netmount-missing-tools" style="margin: 0.3em 0 0 1.4em; font-size: 0.9em;"></ul>
+            </div>
+        </div>
+
+        <div class="ts-grid mobile:is-stacked">
+            <!-- Left: mounted / configured connections -->
+            <div class="column is-6-wide">
+                <div class="ts-text is-label has-bottom-spaced-small" i18n>Managed Connections
+                    // 管理的連線
+                </div>
+                <div id="netmount_conn_list" class="ts-menu is-start-icon is-separated">
+                    <div class="ts-blankslate" style="pointer-events: none; user-select: none; opacity: 0.7;">
+                        <div class="description">
+                            <span class="ts-icon is-circle-notch-icon is-spinning"></span>
+                            <span class="has-start-spaced-small">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ts-text is-label has-top-spaced-large has-bottom-spaced-small" i18n>Other System Network Mounts
+                    // 其他系統網路掛載
+                </div>
+                <div id="netmount_system_list" class="ts-menu is-start-icon is-separated">
+                    <div class="ts-blankslate" style="pointer-events: none; user-select: none; opacity: 0.7;">
+                        <div class="description">
+                            <span class="ts-icon is-circle-notch-icon is-spinning"></span>
+                            <span class="has-start-spaced-small">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ts-divider has-top-spaced-small"></div>
+                <div class="ts-content is-center-aligned">
+                    <button onclick="showNewConnectionDialog();" class="ts-button is-start-icon is-positive is-circular">
+                        <span class="ts-icon is-circle-plus-icon" style="color: var(--ts-positive-500);"></span>
+                        <span i18n>New Connection
+                            // 新增連線
+                        </span>
+                    </button>
+                    <button onclick="initConnectionList();" class="ts-button is-start-icon has-start-spaced-small is-circular">
+                        <span class="ts-icon is-rotate-icon"></span>
+                        <span i18n>Refresh
+                            // 重新整理
+                        </span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right: detail view -->
+            <div class="column is-fluid">
+                <div id="netmount_details">
+                    <div class="ts-blankslate">
+                        <span class="ts-icon is-network-wired-icon"></span>
+                        <div class="header" i18n>Network Filesystems
+                            // 網路檔案系統
+                        </div>
+                        <div class="description" i18n>Select a connection on the left or create a new one to mount a WebDAV, FTP, SMB or NFS filesystem onto this host.
+                            // 從左側選擇連線，或新增連線以將 WebDAV、FTP、SMB 或 NFS 檔案系統掛載到此主機。
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Connection Dialog -->
+    <dialog id="netmount_new" class="ts-modal">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header">
+                    <span id="nm_dialog_title_new" i18n>New Network Filesystem Connection
+                        // 新增網路檔案系統連線
+                    </span>
+                    <span id="nm_dialog_title_edit" style="display:none;" i18n>Edit Connection
+                        // 編輯連線
+                    </span>
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content" style="max-height: 60vh; overflow-y: auto;">
+                <div class="ts-text is-label" i18n>Connection Name
+                    // 連線名稱
+                </div>
+                <div class="ts-input is-fluid has-top-spaced-small">
+                    <input type="text" id="nm_name" placeholder="My NAS">
+                </div>
+
+                <div class="ts-text is-label has-top-spaced" i18n>Protocol
+                    // 通訊協定
+                </div>
+                <div class="ts-select is-fluid has-top-spaced-small">
+                    <select id="nm_protocol" onchange="updateNewConnProtocolHints();">
+                        <option value="smb">SMB / CIFS (Windows Share)</option>
+                        <option value="nfs">NFS</option>
+                        <option value="webdav">WebDAV</option>
+                        <option value="ftp">FTP</option>
+                    </select>
+                </div>
+                <div id="nm_tool_hint" class="ts-text is-tiny is-negative has-top-spaced-small" style="display:none;"></div>
+
+                <!-- WebDAV only: http or https -->
+                <div id="nm_scheme_row" style="display:none;">
+                    <div class="ts-text is-label has-top-spaced" i18n>Scheme
+                        // 傳輸協定
+                    </div>
+                    <div class="ts-select is-fluid has-top-spaced-small">
+                        <select id="nm_scheme">
+                            <option value="http">http://</option>
+                            <option value="https">https://</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="ts-grid is-2-columns has-top-spaced">
+                    <div class="column">
+                        <div class="ts-text is-label" i18n>Host / IP
+                            // 主機 / IP
+                        </div>
+                        <div class="ts-input is-fluid has-top-spaced-small">
+                            <input type="text" id="nm_host" placeholder="192.168.1.10">
+                        </div>
+                    </div>
+                    <div class="column">
+                        <div class="ts-text is-label" i18n>Port (optional)
+                            // 連接埠（選填）
+                        </div>
+                        <div class="ts-input is-fluid has-top-spaced-small">
+                            <input type="number" id="nm_port" placeholder="default">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ts-text is-label has-top-spaced"><span id="nm_path_label">Share Name</span></div>
+                <div class="ts-input is-fluid has-top-spaced-small">
+                    <input type="text" id="nm_path" placeholder="share">
+                </div>
+
+                <div class="ts-grid is-2-columns has-top-spaced">
+                    <div class="column">
+                        <div class="ts-text is-label" i18n>Username
+                            // 使用者名稱
+                        </div>
+                        <div class="ts-input is-fluid has-top-spaced-small">
+                            <input type="text" id="nm_username" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="column">
+                        <div class="ts-text is-label" i18n>Password
+                            // 密碼
+                        </div>
+                        <div class="ts-input is-fluid has-top-spaced-small">
+                            <input type="password" id="nm_password" autocomplete="new-password">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ts-text is-label has-top-spaced" i18n>Mount Point
+                    // 掛載點
+                </div>
+                <div class="ts-row has-top-spaced-small">
+                    <div class="column is-fluid">
+                        <div class="ts-input is-fluid">
+                            <input type="text" id="nm_mountpoint" placeholder="/mnt/mynas">
+                        </div>
+                    </div>
+                    <div class="column">
+                        <button class="ts-button is-outlined" onclick="pickFolder(function(p){ $('#nm_mountpoint').val(p); });" i18n>Browse
+                            // 瀏覽
+                        </button>
+                    </div>
+                </div>
+
+                <div class="ts-text is-label has-top-spaced" i18n>Extra Mount Options (optional)
+                    // 額外掛載選項（選填）
+                </div>
+                <div class="ts-input is-fluid has-top-spaced-small">
+                    <input type="text" id="nm_options" placeholder="e.g. vers=3.0,ro">
+                </div>
+
+                <label class="ts-checkbox has-top-spaced">
+                    <input type="checkbox" id="nm_automount">
+                    <span i18n>Mount automatically when bokodm starts
+                        // bokodm 啟動時自動掛載
+                    </span>
+                </label>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-positive" id="nm_create_btn" onclick="createNewConnection();">
+                        <span id="nm_btn_label_new" i18n>Create &amp; Mount
+                            // 建立並掛載
+                        </span>
+                        <span id="nm_btn_label_edit" style="display:none;" i18n>Save Changes
+                            // 儲存變更
+                        </span>
+                    </button>
+                    <button class="ts-button" onclick="$('#netmount_new')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Remove Connection Warning -->
+    <dialog id="netmount_remove_warning" class="ts-modal">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header" i18n>Confirm remove connection?
+                    // 確認移除連線？
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content">
+                <div class="ts-text is-description" i18n>The network filesystem will be unmounted and the stored connection settings will be deleted. No remote data will be touched.
+                    // 網路檔案系統將被卸載，且儲存的連線設定將被刪除。遠端資料不會受到影響。
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-negative" onclick="confirmRemoveConnection();" i18n>Confirm
+                        // 確認
+                    </button>
+                    <button class="ts-button" onclick="$('#netmount_remove_warning')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+</div>
+<script>
+    var netmountTools = {};       // protocol → ToolInfo
+    var netmountConnections = []; // last loaded ConnectionStatus list
+
+    var netmountProtocolMeta = {
+        "smb":    { label: "SMB / CIFS", pathLabel: "Share Name", pathPlaceholder: "share" },
+        "nfs":    { label: "NFS", pathLabel: "Export Path", pathPlaceholder: "/export/data" },
+        "webdav": { label: "WebDAV", pathLabel: "URL Path", pathPlaceholder: "/dav" },
+        "ftp":    { label: "FTP", pathLabel: "Remote Path", pathPlaceholder: "/" },
+    };
+
+    function nmHumanFileSize(size) {
+        if (size === undefined || size === null || size < 0 || isNaN(size)) return "-";
+        var i = size == 0 ? 0 : Math.floor(Math.log(size) / Math.log(1024));
+        return +((size / Math.pow(1024, i)).toFixed(1)) * 1 + ' ' + ['B', 'kB', 'MB', 'GB', 'TB'][i];
+    }
+
+    function nmEsc(text){
+        if (text === undefined || text === null || text === "") return "";
+        return $("<span>").text(text).html();
+    }
+
+    /* Tool availability */
+    function loadNetmountTools(callback=undefined){
+        $.get("./api/netmount/tools", function(data){
+            if (data.error != undefined){
+                return;
+            }
+            netmountTools = {};
+            let missing = [];
+            data.forEach(function(tool){
+                netmountTools[tool.protocol] = tool;
+                if (!tool.available){
+                    missing.push(tool);
+                }
+            });
+
+            if (missing.length > 0){
+                let list = $("#netmount-missing-tools");
+                list.empty();
+                missing.forEach(function(tool){
+                    list.append(`<li><b>${nmEsc(tool.binary)}</b> (${netmountProtocolMeta[tool.protocol].label})
+                        &nbsp;—&nbsp; <code>${nmEsc(tool.installHint)}</code></li>`);
+                });
+                $("#netmount-tool-warning").show();
+            }else{
+                $("#netmount-tool-warning").hide();
+            }
+            if (callback){ callback(); }
+        });
+    }
+
+    /* Connection list */
+    var nmSelectedUUID = null; // currently shown connection in the detail view
+
+    function initConnectionList(){
+        loadNetmountTools();
+        $.get("./api/netmount/list", function(data){
+            let list = $("#netmount_conn_list");
+            list.empty();
+            if (data.error != undefined){
+                list.append(`<div class="ts-text is-negative">Error: ${nmEsc(data.error)}</div>`);
+                return;
+            }
+            netmountConnections = data;
+            if (data.length == 0){
+                list.append(`<div class="ts-blankslate" style="pointer-events: none; user-select: none; opacity: 0.7;">
+                    <div class="description" i18n>No managed connection
+                        // 沒有管理的連線
+                    </div>
+                </div>`);
+            }
+            data.forEach(function(conn, index){
+                let stateIcon = conn.isMounted
+                    ? '<span class="ts-icon is-link-icon" style="color: var(--ts-positive-500); font-size: 2em;"></span>'
+                    : '<span class="ts-icon is-link-slash-icon" style="color: var(--ts-gray-400); font-size: 2em;"></span>';
+                list.append(`<a class="netmount-conn item" idx="${index}" onclick="showConnectionDetails(${index});">
+                    ${stateIcon}
+                    <div class="ts-content is-dense">
+                        <div>
+                            <span class="ts-text is-heavy">${nmEsc(conn.name)}</span>
+                            <span class="ts-badge is-secondary netmount-conn-badge">${netmountProtocolMeta[conn.protocol].label}</span>
+                        </div>
+                        <div class="ts-text is-tiny has-top-spaced-small">${nmEsc(conn.mountPoint)}</div>
+                    </div>
+                </a>`);
+            });
+
+            // Refresh the detail view with the newly loaded state of the
+            // connection that is currently shown
+            if (nmSelectedUUID != null){
+                let selectedIndex = data.findIndex(function(c){ return c.uuid == nmSelectedUUID; });
+                if (selectedIndex >= 0){
+                    showConnectionDetails(selectedIndex);
+                }else{
+                    // Connection no longer exists (removed)
+                    nmSelectedUUID = null;
+                    $("#netmount_details").html("");
+                }
+            }
+            relocale();
+        });
+
+        $.get("./api/netmount/system", function(data){
+            let list = $("#netmount_system_list");
+            list.empty();
+            if (data.error != undefined || !Array.isArray(data) || data.length == 0){
+                list.append(`<div class="ts-blankslate" style="pointer-events: none; user-select: none; opacity: 0.7;">
+                    <div class="description" i18n>No other network mount found
+                        // 沒有其他網路掛載
+                    </div>
+                </div>`);
+                relocale();
+                return;
+            }
+            data.forEach(function(mount){
+                list.append(`<div class="item" style="pointer-events: none;">
+                    <span class="ts-icon is-server-icon" style="font-size: 2em; color: var(--ts-gray-500);"></span>
+                    <div class="ts-content is-dense">
+                        <div><span class="ts-text is-heavy">${nmEsc(mount.device)}</span>
+                            <span class="ts-badge is-secondary netmount-conn-badge">${nmEsc(mount.fstype)}</span>
+                        </div>
+                        <div class="ts-text is-tiny has-top-spaced-small">${nmEsc(mount.mountPoint)}</div>
+                    </div>
+                </div>`);
+            });
+            relocale();
+        });
+    }
+
+    /* Detail view */
+    function buildRemoteLocationString(conn){
+        let port = conn.port ? (":" + conn.port) : "";
+        switch (conn.protocol){
+            case "smb": return "//" + conn.host + "/" + (conn.path || "").replace(/^\//, "");
+            case "nfs": return conn.host + port + ":" + (conn.path || "/");
+            case "webdav": return (conn.host.includes("://") ? conn.host : "http://" + conn.host) + port + (conn.path || "/");
+            case "ftp": return "ftp://" + conn.host + port + (conn.path || "/");
+        }
+        return conn.host;
+    }
+
+    function showConnectionDetails(index){
+        $(".netmount-conn").removeClass("is-active");
+        $(`.netmount-conn[idx="${index}"]`).addClass("is-active");
+        let conn = netmountConnections[index];
+        if (conn == undefined){ return; }
+        nmSelectedUUID = conn.uuid;
+
+        let usageSection = "";
+        if (conn.isMounted && conn.hasUsage){
+            let usedPercentage = conn.sizeTotal > 0 ? (conn.sizeUsed / conn.sizeTotal * 100) : 0;
+            usageSection = `<div class="ts-wrap is-middle-aligned has-top-spaced-large">
+                <div class="ts-gauge is-small is-circular">
+                    <div class="bar" style="--value: ${usedPercentage.toFixed(1)}">
+                        <div class="text">${usedPercentage.toFixed(1)}%</div>
+                    </div>
+                </div>
+                <div>
+                    <div class="ts-text is-bold" i18n>Remote Volume Usage
+                        // 遠端空間使用率
+                    </div>
+                    ${nmHumanFileSize(conn.sizeUsed)} / ${nmHumanFileSize(conn.sizeTotal)}
+                    (<span i18n>free // 剩餘</span>: ${nmHumanFileSize(conn.sizeFree)})
+                </div>
+            </div>`;
+        }else if (conn.isMounted){
+            usageSection = `<div class="ts-text is-description has-top-spaced-large" i18n>
+                This protocol does not report remote volume usage.
+                // 此通訊協定不支援回報遠端空間使用量。
+            </div>`;
+        }
+
+        let mountBtn = conn.isMounted
+            ? `<button class="ts-button is-circular is-start-icon" onclick="unmountConnection('${conn.uuid}');">
+                    <span class="ts-icon is-link-slash-icon"></span>
+                    <span i18n>Unmount // 卸載</span>
+               </button>`
+            : `<button class="ts-button is-circular is-start-icon is-positive" onclick="mountConnection('${conn.uuid}');">
+                    <span class="ts-icon is-link-icon" style="color: var(--ts-positive-500);"></span>
+                    <span i18n>Mount // 掛載</span>
+               </button>`;
+
+        $("#netmount_details").html(`<div class="netmount-details">
+            <div class="ts-box">
+                <div class="ts-content is-padded">
+                    <div class="ts-header is-start-icon">
+                        ${conn.isMounted
+                            ? '<span class="ts-icon is-link-icon" style="color: var(--ts-positive-500);"></span>'
+                            : '<span class="ts-icon is-link-slash-icon" style="color: var(--ts-gray-400);"></span>'}
+                        ${nmEsc(conn.name)}
+                        <span class="ts-badge is-start-spaced">${netmountProtocolMeta[conn.protocol].label}</span>
+                        ${conn.isMounted
+                            ? '<span class="ts-badge is-positive is-start-spaced">MOUNTED</span>'
+                            : '<span class="ts-badge is-secondary is-start-spaced">NOT MOUNTED</span>'}
+                    </div>
+                    <div class="ts-text is-description">${nmEsc(conn.uuid)}</div>
+                    <table class="ts-table is-single-line has-top-spaced-large">
+                        <tbody>
+                            <tr><td style="font-weight:600;" i18n>Remote Location // 遠端位置</td><td>${nmEsc(buildRemoteLocationString(conn))}</td></tr>
+                            <tr><td style="font-weight:600;" i18n>Mount Point // 掛載點</td><td>${nmEsc(conn.mountPoint)}</td></tr>
+                            <tr><td style="font-weight:600;" i18n>Username // 使用者名稱</td><td>${nmEsc(conn.username) || "-"}</td></tr>
+                            <tr><td style="font-weight:600;" i18n>Extra Options // 額外選項</td><td>${nmEsc(conn.options) || "-"}</td></tr>
+                            <tr><td style="font-weight:600;" i18n>Automount // 自動掛載</td><td>${conn.automount ? "&#10003;" : "-"}</td></tr>
+                        </tbody>
+                    </table>
+                    ${usageSection}
+                </div>
+            </div>
+            <div class="has-top-spaced-small">
+                <div class="ts-box">
+                    <div class="ts-content">
+                        <div class="ts-wrap">
+                            ${mountBtn}
+                            <button class="ts-button is-circular is-start-icon" ${conn.isMounted ? 'disabled title="Unmount the connection before editing"' : ''} onclick="showEditConnectionDialog('${conn.uuid}');">
+                                <span class="ts-icon is-pen-to-square-icon"></span>
+                                <span i18n>Edit // 編輯</span>
+                            </button>
+                            <button class="ts-button is-circular is-start-icon is-negative" onclick="showRemoveConnectionWarning('${conn.uuid}');">
+                                <span class="ts-icon is-trash-icon"></span>
+                                <span i18n>Remove // 移除</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>`);
+        relocale();
+    }
+
+    /* Mount / unmount / remove */
+    function mountConnection(uuid){
+        showLoading("Mounting network filesystem...");
+        $.cjax({
+            url: "./api/netmount/mount",
+            method: "POST",
+            data: { uuid: uuid },
+            complete: function(){ hideLoading(); },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("netmount_mounted_succ"));
+                }
+                setTimeout(initConnectionList, 300);
+            }
+        });
+    }
+
+    function unmountConnection(uuid){
+        showLoading("Unmounting network filesystem...");
+        $.cjax({
+            url: "./api/netmount/unmount",
+            method: "POST",
+            data: { uuid: uuid },
+            complete: function(){ hideLoading(); },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("netmount_unmounted_succ"));
+                }
+                setTimeout(initConnectionList, 300);
+            }
+        });
+    }
+
+    function showRemoveConnectionWarning(uuid){
+        $("#netmount_remove_warning").attr("uuid", uuid);
+        $("#netmount_remove_warning")[0].showModal();
+    }
+
+    function confirmRemoveConnection(){
+        let uuid = $("#netmount_remove_warning").attr("uuid");
+        $("#netmount_remove_warning")[0].close();
+        showLoading("Removing connection...");
+        $.cjax({
+            url: "./api/netmount/remove",
+            method: "POST",
+            data: { uuid: uuid },
+            complete: function(){ hideLoading(); },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("netmount_removed_succ"));
+                    $("#netmount_details").html("");
+                }
+                setTimeout(initConnectionList, 300);
+            }
+        });
+    }
+
+    /* New / edit connection dialog */
+    var editingConnectionUUID = null; // null = creating a new connection
+
+    function resetConnectionDialog(){
+        editingConnectionUUID = null;
+        $("#nm_name, #nm_host, #nm_port, #nm_path, #nm_username, #nm_password, #nm_mountpoint, #nm_options").val("");
+        $("#nm_password").attr("placeholder", "");
+        $("#nm_automount")[0].checked = false;
+        $("#nm_protocol").val("smb");
+        $("#nm_scheme").val("http");
+        $("#nm_dialog_title_new, #nm_btn_label_new").show();
+        $("#nm_dialog_title_edit, #nm_btn_label_edit").hide();
+    }
+
+    function showNewConnectionDialog(){
+        resetConnectionDialog();
+        loadNetmountTools(updateNewConnProtocolHints);
+        $("#netmount_new")[0].showModal();
+    }
+
+    function showEditConnectionDialog(uuid){
+        let conn = netmountConnections.find(function(c){ return c.uuid == uuid; });
+        if (conn == undefined){ return; }
+        if (conn.isMounted){
+            msgbox("Unmount the connection before editing");
+            return;
+        }
+        resetConnectionDialog();
+        editingConnectionUUID = uuid;
+
+        // For WebDAV the scheme is stored as part of the host, split it
+        // back into the dropdown + host field
+        let host = conn.host;
+        if (conn.protocol == "webdav" && host.includes("://")){
+            let parts = host.split("://");
+            $("#nm_scheme").val(parts[0] == "https" ? "https" : "http");
+            host = parts.slice(1).join("://");
+        }
+
+        $("#nm_name").val(conn.name);
+        $("#nm_protocol").val(conn.protocol);
+        $("#nm_host").val(host);
+        $("#nm_port").val(conn.port ? conn.port : "");
+        $("#nm_path").val(conn.path || "");
+        $("#nm_username").val(conn.username || "");
+        $("#nm_password").val("");
+        $("#nm_password").attr("placeholder", "(unchanged)");
+        $("#nm_mountpoint").val(conn.mountPoint);
+        $("#nm_options").val(conn.options || "");
+        $("#nm_automount")[0].checked = !!conn.automount;
+
+        $("#nm_dialog_title_new, #nm_btn_label_new").hide();
+        $("#nm_dialog_title_edit, #nm_btn_label_edit").show();
+
+        loadNetmountTools(updateNewConnProtocolHints);
+        $("#netmount_new")[0].showModal();
+    }
+
+    function updateNewConnProtocolHints(){
+        let protocol = $("#nm_protocol").val();
+        let meta = netmountProtocolMeta[protocol];
+        $("#nm_path_label").text(meta.pathLabel);
+        $("#nm_path").attr("placeholder", meta.pathPlaceholder);
+
+        // Scheme selector only applies to WebDAV
+        if (protocol == "webdav"){
+            $("#nm_scheme_row").show();
+        }else{
+            $("#nm_scheme_row").hide();
+        }
+
+        let tool = netmountTools[protocol];
+        if (tool && !tool.available){
+            $("#nm_tool_hint").html(`&#9888; ${tool.binary} is not installed. Install it with <code>${nmEsc(tool.installHint)}</code>`);
+            $("#nm_tool_hint").show();
+            $("#nm_create_btn").attr("disabled", true);
+        }else{
+            $("#nm_tool_hint").hide();
+            $("#nm_create_btn").removeAttr("disabled");
+        }
+    }
+
+    function createNewConnection(){
+        let protocol = $("#nm_protocol").val();
+        let host = $("#nm_host").val().trim();
+
+        // WebDAV: bake the selected scheme into the host
+        if (protocol == "webdav" && host != ""){
+            host = host.replace(/^https?:\/\//, "");
+            host = $("#nm_scheme").val() + "://" + host;
+        }
+
+        let payload = {
+            name: $("#nm_name").val().trim(),
+            protocol: protocol,
+            host: host,
+            port: $("#nm_port").val().trim(),
+            path: $("#nm_path").val().trim(),
+            username: $("#nm_username").val(),
+            password: $("#nm_password").val(),
+            mountPoint: $("#nm_mountpoint").val().trim(),
+            options: $("#nm_options").val().trim(),
+            automount: $("#nm_automount")[0].checked,
+        };
+
+        if (payload.name == ""){ msgbox("Connection name is required"); return; }
+        if (payload.host == ""){ msgbox("Remote host is required"); return; }
+        if (payload.mountPoint == ""){ msgbox("Mount point is required"); return; }
+
+        let isEdit = editingConnectionUUID != null;
+        if (isEdit){
+            payload.uuid = editingConnectionUUID;
+        }
+
+        $("#nm_create_btn").attr("disabled", true);
+        showLoading(isEdit ? "Saving connection..." : "Mounting network filesystem...");
+        $.cjax({
+            url: isEdit ? "./api/netmount/edit" : "./api/netmount/add",
+            method: "POST",
+            data: payload,
+            complete: function(){ hideLoading(); },
+            success: function(data){
+                $("#nm_create_btn").removeAttr("disabled");
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                    // Connection settings may have been stored even when the
+                    // first mount failed, refresh the list to show it
+                    initConnectionList();
+                }else{
+                    msgbox(isEdit ? i18nc("netmount_updated_succ") : i18nc("netmount_created_succ"));
+                    $("#netmount_new")[0].close();
+                    resetConnectionDialog();
+                    initConnectionList();
+                }
+            },
+        });
+    }
+
+    initConnectionList();
+</script>

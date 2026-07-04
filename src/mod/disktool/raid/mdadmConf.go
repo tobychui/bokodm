@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"imuslab.com/bokofs/bokofsd/mod/disktool/diskfs"
-	"imuslab.com/bokofs/bokofsd/mod/utils"
+	"imuslab.com/bokodm/bokodmd/mod/disktool/diskfs"
+	"imuslab.com/bokodm/bokodmd/mod/utils"
 )
 
 /*

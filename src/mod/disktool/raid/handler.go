@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"imuslab.com/bokofs/bokofsd/mod/disktool/diskfs"
-	"imuslab.com/bokofs/bokofsd/mod/utils"
+	"imuslab.com/bokodm/bokodmd/mod/disktool/diskfs"
+	"imuslab.com/bokodm/bokodmd/mod/utils"
 )
 
 /*
@@ -75,6 +75,110 @@ func (m *Manager) HandleRemoveDiskFromRAIDVol(w http.ResponseWriter, r *http.Req
 	utils.SendOK(w)
 }
 
+// Handle marking a member disk (sdX) as failed in RAID volume (mdX)
+// This is the first step of a disk swap operation: the disk is marked
+// as faulty so mdadm stops writing to it, but it stays in the array
+// until it is removed with the remove API.
+func (m *Manager) HandleFailDisk(w http.ResponseWriter, r *http.Request) {
+	//mdadm /dev/md0 --fail /dev/sdb1
+	mdDev, err := utils.PostPara(r, "raidDev")
+	if err != nil {
+		utils.SendErrorResponse(w, "invalid raid device given")
+		return
+	}
+
+	sdXDev, err := utils.PostPara(r, "memDev")
+	if err != nil {
+		utils.SendErrorResponse(w, "invalid member device given")
+		return
+	}
+
+	//Check if target array exists
+	if !m.RAIDDeviceExists(mdDev) {
+		utils.SendErrorResponse(w, "target RAID array not exists")
+		return
+	}
+
+	//Removal safety check also applies to failing a disk: failing the
+	//last data-holding disk of an array kills the array
+	if !m.IsSafeToRemove(mdDev, sdXDev) {
+		utils.SendErrorResponse(w, "marking this device as failed will cause data loss")
+		return
+	}
+
+	diskAlreadyFailed, err := m.DiskIsFailed(mdDev, sdXDev)
+	if err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+	if diskAlreadyFailed {
+		utils.SendErrorResponse(w, "target device is already marked as failed")
+		return
+	}
+
+	err = m.FailDisk(mdDev, sdXDev)
+	if err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+
+	log.Println("[RAID] Member disk " + sdXDev + " marked as failed in RAID volume " + mdDev)
+	utils.SendOK(w)
+}
+
+// Handle listing disks that can be added to a RAID volume as a new
+// member or hot spare. A disk qualifies when it is a physical disk,
+// carries no mounted filesystem (itself or any of its partitions) and is
+// not a member of any RAID array.
+func (m *Manager) HandleListAddCandidates(w http.ResponseWriter, r *http.Request) {
+	storageDevices, err := diskfs.ListAllStorageDevices()
+	if err != nil {
+		utils.SendErrorResponse(w, err.Error())
+		return
+	}
+
+	//Collect the name of every RAID member device (can be sdX or sdX1)
+	raidMembers := map[string]bool{}
+	raidPools, err := m.GetRAIDDevicesFromProcMDStat()
+	if err == nil {
+		for _, md := range raidPools {
+			for _, member := range md.Members {
+				raidMembers[member.Name] = true
+			}
+		}
+	}
+
+	candidates := []diskfs.BlockDeviceMeta{}
+	for _, device := range storageDevices.Blockdevices {
+		if device.Type != "disk" {
+			continue
+		}
+		//Skip virtual / non-storage devices
+		if strings.HasPrefix(device.Name, "loop") || strings.HasPrefix(device.Name, "zram") || strings.HasPrefix(device.Name, "sr") || strings.HasPrefix(device.Name, "md") {
+			continue
+		}
+		if raidMembers[device.Name] {
+			continue
+		}
+
+		inUse := device.Mountpoint != ""
+		for _, child := range device.Children {
+			if child.Mountpoint != "" || raidMembers[child.Name] {
+				inUse = true
+				break
+			}
+		}
+		if inUse {
+			continue
+		}
+
+		candidates = append(candidates, device)
+	}
+
+	js, _ := json.Marshal(candidates)
+	utils.SendJSONResponse(w, string(js))
+}
+
 // Handle adding a disk (mdX) to RAID volume (mdX)
 func (m *Manager) HandleAddDiskToRAIDVol(w http.ResponseWriter, r *http.Request) {
 	//mdadm --add /dev/md0 /dev/sdb1
@@ -111,6 +215,7 @@ func (m *Manager) HandleAddDiskToRAIDVol(w http.ResponseWriter, r *http.Request)
 	diskUsedByAnotherRAID, err := m.DiskIsUsedInAnotherRAIDVol(sdXDev)
 	if err != nil {
 		utils.SendErrorResponse(w, err.Error())
+		return
 	}
 
 	if diskUsedByAnotherRAID {
@@ -121,11 +226,24 @@ func (m *Manager) HandleAddDiskToRAIDVol(w http.ResponseWriter, r *http.Request)
 	isOSDisk, err := m.DiskIsRoot(sdXDev)
 	if err != nil {
 		utils.SendErrorResponse(w, err.Error())
+		return
 	}
 
 	if isOSDisk {
 		utils.SendErrorResponse(w, "OS disk cannot be used as RAID member")
 		return
+	}
+
+	//Reject disks that contain any mounted partition: they are either in
+	//use or serving system paths like /boot
+	bdMeta, err := diskfs.GetBlockDeviceMeta(sdXDev)
+	if err == nil {
+		for _, child := range bdMeta.Children {
+			if child.Mountpoint != "" {
+				utils.SendErrorResponse(w, "target disk contains mounted partitions and cannot be used as RAID member")
+				return
+			}
+		}
 	}
 
 	//OK! Clear the disk
@@ -593,6 +711,11 @@ func (m *Manager) HandleGrowRAIDArray(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		utils.SendErrorResponse(w, "raid device not given")
 		return
+	}
+
+	//mdadm --detail requires the full device path
+	if !strings.HasPrefix(deviceName, "/dev/") {
+		deviceName = filepath.Join("/dev/", deviceName)
 	}
 
 	if !m.RAIDDeviceExists(deviceName) {

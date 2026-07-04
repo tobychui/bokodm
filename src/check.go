@@ -11,12 +11,25 @@ package main
 	buildDependencyList() is platform-specific and lives in dep_*.go.
 */
 
-import "os/exec"
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+)
 
-// commandExists reports whether cmd is found on the PATH.
+// commandExists reports whether cmd is found on the PATH or in one of the
+// standard sbin locations (mount helpers like mount.cifs live in /sbin,
+// which is not always on PATH when running without a login shell).
 func commandExists(cmd string) bool {
-	_, err := exec.LookPath(cmd)
-	return err == nil
+	if _, err := exec.LookPath(cmd); err == nil {
+		return true
+	}
+	for _, dir := range []string{"/sbin", "/usr/sbin", "/usr/local/sbin"} {
+		if _, err := os.Stat(filepath.Join(dir, cmd)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // checkRuntimeEnvironment probes all platform-required external commands,

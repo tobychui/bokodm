@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"imuslab.com/bokofs/bokofsd/mod/utils"
+	"imuslab.com/bokodm/bokodmd/mod/utils"
 )
 
 func sysIfconfig(w http.ResponseWriter, r *http.Request) {

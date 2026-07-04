@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title i18n>
-        Admin Panel | BokoFS
-        // 管理介面 | BokoFS
+        Admin Panel | BokoDM
+        // 管理介面 | BokoDM
     </title>
     <meta name="boko.csrf.Token" content="{{.csrfToken}}">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -41,7 +41,66 @@
             animation: fadeIn 0.3s ease-in-out;
         }
 
-        
+        /* Closed dialogs must stay hidden, also on mobile where
+           tocas mobile:is-fullscreen styling would otherwise reveal them */
+        dialog.ts-modal:not([open]){
+            display: none !important;
+        }
+
+        /* Global blocking loading overlay for slow disk operations */
+        #boko-loading{
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 99999;
+            align-items: center;
+            justify-content: center;
+        }
+        #boko-loading .loading-box{
+            background: var(--ts-gray-50, #fff);
+            border-radius: 0.6em;
+            padding: 1.4em 2em;
+            text-align: center;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+        }
+
+        /* Mobile side menu */
+        #mobile_menu_backdrop{
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 9998;
+        }
+        #mobile_side_menu{
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 260px;
+            max-width: 80vw;
+            background: var(--ts-gray-50, #fff);
+            z-index: 9999;
+            transform: translateX(-105%);
+            transition: transform 0.25s ease;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.25);
+            overflow-y: auto;
+        }
+        #mobile_side_menu.open{
+            transform: translateX(0);
+        }
+        #mobile_menu_toggle{
+            display: none;
+        }
+        @media (max-width: 768px){
+            #main_menu .item[data-tab]{
+                display: none !important;
+            }
+            #mobile_menu_toggle{
+                display: inline-flex !important;
+            }
+        }
     </style>
     <script>
         //Add a new function to jquery for ajax override with csrf token injected
@@ -76,11 +135,14 @@
                     <span class="ts-icon is-moon-icon"></span>
                 </button>
             </div>
-            <div class="ts-tab is-pilled">
+            <div class="ts-tab is-pilled" id="main_menu">
+                <button class="ts-button is-icon item" id="mobile_menu_toggle" onclick="openMobileMenu();">
+                    <span class="ts-icon is-bars-icon"></span>
+                </button>
                 <a href="" class="item" style="user-select: none;">
                     <img id="sysicon" class="ts-image" style="height: 30px" src="img/logo.svg"></img>
                 </a>
-                <button href="#!" class="item" data-tab="tab-status" i18n>
+                <button href="#!" class="item is-active" data-tab="tab-status" i18n>
                     Status
                     // 系統狀態
                 </button>
@@ -92,7 +154,11 @@
                     Disks
                     // 磁碟資訊
                 </button>
-                <button href="#!" class="item is-active" data-tab="tab-raid" i18n>
+                <button href="#!" class="item" data-tab="tab-smart" i18n>
+                    SMART
+                    // 磁碟健康
+                </button>
+                <button href="#!" class="item" data-tab="tab-raid" i18n>
                     RAID
                     // 磁碟陣列
                 </button>
@@ -129,16 +195,17 @@
         <div class="boko-panel-component" id="tab-status" component="status.html">Status</div>
         <div class="boko-panel-component" id="tab-connections" component="connections.html">Connections</div>
         <div class="boko-panel-component" id="tab-disks" component="disks.html">Disks</div>
+        <div class="boko-panel-component" id="tab-smart" component="smart.html">SMART</div>
         <div class="boko-panel-component" id="tab-raid" component="raid.html">RAID</div>
-        <div class="boko-panel-component" id="tab-tools">Tools</div>
-        <div class="boko-panel-component" id="tab-logs">Logs</div>
-        <div class="boko-panel-component" id="tab-settings">Settings</div>
+        <div class="boko-panel-component" id="tab-tools" component="tools.html">Tools</div>
+        <div class="boko-panel-component" id="tab-logs" component="logs.html">Logs</div>
+        <div class="boko-panel-component" id="tab-settings" component="settings.html">Settings</div>
     </div>
     <div class="ts-container">
         <div class="ts-divider"></div>
         <div class="ts-content">
             <div class="ts-text">
-                BokoFS © tobychui 2024 - <span class="thisyear">2025</span>
+                BokoDM © tobychui 2024 - <span class="thisyear">2025</span>
             </div>
         </div>
     </div>
@@ -146,6 +213,170 @@
         <div class="content"></div>
         <button class="close"></button>
     </div>
+
+    <!-- Global loading overlay -->
+    <div id="boko-loading">
+        <div class="loading-box">
+            <span class="ts-icon is-spinning is-circle-notch-icon" style="font-size: 2em;"></span>
+            <div class="ts-text has-top-spaced-small" id="boko-loading-text">Working...</div>
+        </div>
+    </div>
+
+    <!-- Mobile side menu -->
+    <div id="mobile_menu_backdrop" onclick="closeMobileMenu();"></div>
+    <div id="mobile_side_menu">
+        <div class="ts-content">
+            <img class="ts-image" style="height: 28px;" src="img/logo.svg">
+            <button class="ts-close" style="float: right;" onclick="closeMobileMenu();"></button>
+        </div>
+        <div class="ts-divider"></div>
+        <div class="ts-menu" id="mobile_menu_items"></div>
+    </div>
+    <script>
+        /* ── Global loading overlay ──
+           Blocks the UI during slow disk operations so the user cannot
+           trigger the same action twice. */
+        function showLoading(msg){
+            $("#boko-loading-text").text(msg || "Working...");
+            $("#boko-loading").css("display", "flex");
+        }
+        function hideLoading(){
+            $("#boko-loading").hide();
+        }
+
+        /* ── Mobile side menu ── */
+        function openMobileMenu(){
+            // Rebuild the items from the top tab bar so labels follow the
+            // current language and active tab
+            let menu = $("#mobile_menu_items");
+            menu.empty();
+            $("#main_menu .item[data-tab]").each(function(){
+                let tabId = $(this).attr("data-tab");
+                let label = $(this).text().trim();
+                let isActive = $(this).hasClass("is-active");
+                menu.append(`<a class="item ${isActive ? "is-active" : ""}" onclick="mobileMenuNavigate('${tabId}');">${label}</a>`);
+            });
+            $("#mobile_menu_backdrop").show();
+            $("#mobile_side_menu").addClass("open");
+        }
+
+        function closeMobileMenu(){
+            $("#mobile_side_menu").removeClass("open");
+            $("#mobile_menu_backdrop").hide();
+        }
+
+        function mobileMenuNavigate(tabId){
+            // Proxy the click to the real (hidden) tab button so the tocas
+            // tab logic keeps handling panel switching
+            $(`#main_menu .item[data-tab="${tabId}"]`).click();
+            closeMobileMenu();
+        }
+    </script>
+
+    <!-- Shared host folder picker, use pickFolder(callback) to open -->
+    <dialog id="folder_picker" class="ts-modal">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header" i18n>Select Folder
+                    // 選擇資料夾
+                </div>
+                <div class="ts-text is-description is-code" id="folder_picker_path" style="word-break: break-all;">/</div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content" style="max-height: 320px; overflow-y: auto;">
+                <div id="folder_picker_list" class="ts-menu is-dense"></div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content">
+                <div class="ts-input is-fluid">
+                    <input type="text" id="folder_picker_newname" placeholder="new folder name">
+                </div>
+                <button class="ts-button is-small is-outlined has-top-spaced-small" onclick="folderPickerMkdir();" i18n>Create Folder Here
+                    // 在此建立資料夾
+                </button>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-positive" onclick="folderPickerConfirm();" i18n>Select This Folder
+                        // 選擇此資料夾
+                    </button>
+                    <button class="ts-button" onclick="$('#folder_picker')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+    <script>
+        /* ── Shared folder picker ── */
+        var folderPickerCallback = null;
+        var folderPickerCurrentDir = "/";
+
+        // Open the folder picker. callback receives the chosen absolute path.
+        function pickFolder(callback, startDir="/"){
+            folderPickerCallback = callback;
+            folderPickerLoad(startDir);
+            $("#folder_picker")[0].showModal();
+        }
+
+        function folderPickerLoad(dir){
+            $.get("./api/disks/browse?dir=" + encodeURIComponent(dir), function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                    return;
+                }
+                folderPickerCurrentDir = data.currentDir;
+                $("#folder_picker_path").text(data.currentDir);
+                let list = $("#folder_picker_list");
+                list.empty();
+                if (data.currentDir != "/"){
+                    list.append(`<a class="item" onclick="folderPickerLoad('${data.parentDir.replace(/'/g, "\\'")}');">
+                        <span class="ts-icon is-turn-up-icon is-end-spaced"></span>..</a>`);
+                }
+                data.folders.forEach(function(folder){
+                    let safePath = folder.path.replace(/'/g, "\\'");
+                    let safeName = $("<span>").text(folder.name).html();
+                    list.append(`<a class="item" onclick="folderPickerLoad('${safePath}');">
+                        <span class="ts-icon is-folder-icon is-end-spaced"></span>${safeName}</a>`);
+                });
+                if (data.folders.length == 0 && data.currentDir == "/"){
+                    list.append(`<div class="item is-disabled">No folders</div>`);
+                }
+            });
+        }
+
+        function folderPickerMkdir(){
+            let name = $("#folder_picker_newname").val().trim();
+            if (name == "" || name.includes("/")){
+                msgbox("Invalid folder name");
+                return;
+            }
+            let newPath = folderPickerCurrentDir.replace(/\/$/, "") + "/" + name;
+            $.cjax({
+                url: "./api/disks/mkdir",
+                method: "POST",
+                data: { dir: newPath },
+                success: function(data){
+                    if (data.error != undefined){
+                        msgbox("Error: " + data.error);
+                    }else{
+                        msgbox(i18nc("folder_created_succ"));
+                        $("#folder_picker_newname").val("");
+                        folderPickerLoad(newPath);
+                    }
+                }
+            });
+        }
+
+        function folderPickerConfirm(){
+            $("#folder_picker")[0].close();
+            if (folderPickerCallback){
+                folderPickerCallback(folderPickerCurrentDir);
+                folderPickerCallback = null;
+            }
+        }
+    </script>
     <script>
         var ajaxRequests = [];
         $(".boko-panel-component").each(function(){
@@ -192,7 +423,10 @@
         function applyFeatureGating(report) {
             window.bokoDepReport = report;
 
-            var missing = report.deps ? report.deps.filter(function(d){ return !d.found; }) : [];
+            // Only missing *required* deps trigger the degraded-mode banner.
+            // Optional tools (e.g. network fs mount helpers) show their own
+            // install hints inside the page that needs them.
+            var missing = report.deps ? report.deps.filter(function(d){ return !d.found && d.required; }) : [];
 
             if (report.degradedMode || missing.length > 0) {
                 var list = $("#boko-dep-missing-list");

@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"imuslab.com/bokofs/bokofsd/mod/diskinfo/blkid"
-	"imuslab.com/bokofs/bokofsd/mod/diskinfo/lsblk"
+	"imuslab.com/bokodm/bokodmd/mod/diskinfo/blkid"
+	"imuslab.com/bokodm/bokodmd/mod/diskinfo/lsblk"
 )
 
 // Get a disk by its device path, accept both /dev/sda and sda

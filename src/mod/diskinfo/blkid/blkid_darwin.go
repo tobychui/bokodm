@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"imuslab.com/bokofs/bokofsd/mod/diskinfo/lsblk"
+	"imuslab.com/bokodm/bokodmd/mod/diskinfo/lsblk"
 )
 
 // ---- minimal Apple plist XML parser ----

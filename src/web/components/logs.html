@@ -1,0 +1,328 @@
+<style>
+    #log_viewer{
+        background: var(--ts-gray-800);
+        color: var(--ts-gray-100);
+        border-radius: 0.4em;
+        padding: 1em;
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 0.82em;
+        line-height: 1.5;
+        max-height: 65vh;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+    #log_viewer .log-cat{
+        font-weight: 600;
+    }
+    #log_viewer .log-cat-cmd{ color: #69b7ff; }
+    #log_viewer .log-cat-smart{ color: #6be084; }
+    #log_viewer .log-cat-notify{ color: #d3a4ff; }
+    #log_viewer .log-cat-system{ color: #ffc069; }
+    #log_viewer .log-time{ color: var(--ts-gray-400); }
+    #log_viewer .log-line-error{ color: #ff7875; }
+    #log_file_list .item{
+        overflow: hidden;
+    }
+    #log_file_list .item .ts-content{
+        min-width: 0;
+        flex: 1;
+    }
+</style>
+<div class="ts-content">
+    <div class="ts-container is-padded">
+        <div class="ts-grid mobile:is-stacked">
+            <!-- Log file list -->
+            <div class="column is-4-wide">
+                <div class="ts-text is-label has-bottom-spaced-small" i18n>Monthly Logs
+                    // 每月日誌
+                </div>
+                <div id="log_file_list" class="ts-menu is-separated">
+                    <div class="ts-blankslate" style="pointer-events: none; user-select: none; opacity: 0.7;">
+                        <div class="description">
+                            <span class="ts-icon is-circle-notch-icon is-spinning"></span>
+                            <span class="has-start-spaced-small">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="ts-divider has-top-spaced-small"></div>
+                <div class="ts-content is-center-aligned">
+                    <button onclick="initLogsTab();" class="ts-button is-start-icon is-circular">
+                        <span class="ts-icon is-rotate-icon"></span>
+                        <span i18n>Refresh
+                            // 重新整理
+                        </span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Log content viewer -->
+            <div class="column is-fluid">
+                <div id="log_view_panel" style="display:none;">
+                    <div class="ts-box">
+                        <div class="ts-content is-padded">
+                            <div class="ts-grid is-middle-aligned mobile:is-stacked">
+                                <div class="column is-fluid">
+                                    <div class="ts-header is-heavy" id="log_view_title"></div>
+                                    <div class="ts-text is-tiny is-description" id="log_view_meta"></div>
+                                </div>
+                                <div class="column">
+                                    <div class="ts-wrap is-compact">
+                                        <a class="ts-button is-small is-outlined is-start-icon" id="log_download_btn" href="#">
+                                            <span class="ts-icon is-file-arrow-down-icon"></span>
+                                            <span i18n>Download // 下載</span>
+                                        </a>
+                                        <button class="ts-button is-small is-negative is-outlined is-start-icon" id="log_delete_btn" onclick="showDeleteLogWarning();">
+                                            <span class="ts-icon is-trash-icon"></span>
+                                            <span i18n>Delete // 刪除</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Filters -->
+                            <div class="ts-grid has-top-spaced mobile:is-stacked">
+                                <div class="column is-fluid">
+                                    <div class="ts-input is-fluid is-start-icon">
+                                        <span class="ts-icon is-magnifying-glass-icon"></span>
+                                        <input type="text" id="log_filter_text" placeholder="Filter log lines..." oninput="renderLogContent();">
+                                    </div>
+                                </div>
+                                <div class="column">
+                                    <div class="ts-select">
+                                        <select id="log_filter_category" onchange="renderLogContent();">
+                                            <option value="" i18n>All categories // 全部類別</option>
+                                            <option value="cmd" i18n>System commands // 系統指令</option>
+                                            <option value="smart" i18n>SMART checks // SMART 檢查</option>
+                                            <option value="notify" i18n>Notifications // 通知</option>
+                                            <option value="system" i18n>System events // 系統事件</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="log_truncated_notice" class="ts-notice has-top-spaced-small" style="display:none;">
+                                <div class="content" i18n>This file is large, only the newest part is shown. Use Download to get the full file.
+                                    // 此檔案較大，僅顯示最新的部分。請使用下載取得完整檔案。
+                                </div>
+                            </div>
+
+                            <div id="log_viewer" class="has-top-spaced"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="log_view_placeholder">
+                    <div class="ts-blankslate">
+                        <span class="ts-icon is-file-lines-icon"></span>
+                        <div class="description" i18n>Select a monthly log file on the left to review system command output, scheduled SMART checks and notifications.
+                            // 從左側選擇每月日誌檔案，以檢閱系統指令輸出、排程 SMART 檢查和通知記錄。
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete log warning -->
+    <dialog id="log_delete_warning" class="ts-modal">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header" i18n>Confirm delete log file?
+                    // 確認刪除日誌檔案？
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content">
+                <div class="ts-text is-description">
+                    <span class="ts-text is-code" id="log_delete_target"></span><br>
+                    <span i18n>The log file will be permanently removed.
+                        // 該日誌檔案將被永久刪除。
+                    </span>
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-negative" onclick="confirmDeleteLog();" i18n>Delete
+                        // 刪除
+                    </button>
+                    <button class="ts-button" onclick="$('#log_delete_warning')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+</div>
+<script>
+    var logsSelectedFile = null;
+    var logsSelectedIsCurrent = false;
+    var logsRawLines = [];
+
+    function logsHumanSize(size){
+        if (size === undefined || size === null || isNaN(size)) return "-";
+        var i = size == 0 ? 0 : Math.floor(Math.log(size) / Math.log(1024));
+        return +((size / Math.pow(1024, i)).toFixed(1)) * 1 + ' ' + ['B', 'kB', 'MB', 'GB'][i];
+    }
+
+    function logsEsc(text){
+        return $("<span>").text(text).html();
+    }
+
+    // "bokodm-2026-07.log" → "2026-07" for a friendlier menu label
+    function logsDisplayName(fileName){
+        let match = fileName.match(/^bokodm-(\d{4}-\d{2})\.log$/);
+        return match ? match[1] : fileName;
+    }
+
+    function initLogsTab(){
+        $.get("./api/logs/list", function(files){
+            let list = $("#log_file_list");
+            list.empty();
+            if (files.error != undefined){
+                list.append(`<div class="ts-text is-negative">Error: ${logsEsc(files.error)}</div>`);
+                return;
+            }
+            if (files.length == 0){
+                list.append(`<div class="ts-blankslate" style="pointer-events: none; user-select: none; opacity: 0.7;">
+                    <div class="description" i18n>No log recorded yet
+                        // 尚無日誌記錄
+                    </div>
+                </div>`);
+                $("#log_view_panel").hide();
+                $("#log_view_placeholder").show();
+                relocale();
+                return;
+            }
+            files.forEach(function(file){
+                let currentBadge = file.isCurrent
+                    ? '<span class="ts-badge is-positive" style="margin-top:-3px;" i18n>Current // 本月</span>'
+                    : "";
+                list.append(`<a class="item log-file-item" filename="${file.name}" iscurrent="${file.isCurrent}" onclick="showLogFile('${file.name}', ${file.isCurrent});">
+                    <span class="ts-icon is-file-lines-icon" style="font-size: 1.6em;"></span>
+                    <div class="ts-content is-dense">
+                        <div>
+                            <span class="ts-text is-heavy">${logsEsc(logsDisplayName(file.name))}</span>
+                            ${currentBadge}
+                        </div>
+                        <div class="ts-text is-tiny has-top-spaced-small">${logsHumanSize(file.sizeBytes)} &nbsp;•&nbsp; ${logsEsc(file.modTime)}</div>
+                    </div>
+                </a>`);
+            });
+
+            // Restore previous selection or open the current month
+            let target = files.find(function(f){ return f.name == logsSelectedFile; }) || files.find(function(f){ return f.isCurrent; }) || files[0];
+            showLogFile(target.name, target.isCurrent);
+            relocale();
+        });
+    }
+
+    function showLogFile(fileName, isCurrent){
+        logsSelectedFile = fileName;
+        logsSelectedIsCurrent = isCurrent;
+        $(".log-file-item").removeClass("is-active");
+        $(`.log-file-item[filename="${fileName}"]`).addClass("is-active");
+
+        $.get("./api/logs/view?file=" + encodeURIComponent(fileName), function(data){
+            if (data.error != undefined){
+                msgbox("Error: " + data.error);
+                return;
+            }
+            $("#log_view_placeholder").hide();
+            $("#log_view_panel").show();
+            $("#log_view_title").text(logsDisplayName(fileName));
+            $("#log_view_meta").text(fileName);
+            $("#log_download_btn").attr("href", "./api/logs/download?file=" + encodeURIComponent(fileName));
+            if (isCurrent){
+                $("#log_delete_btn").attr("disabled", true).attr("title", "The active log file cannot be deleted");
+            }else{
+                $("#log_delete_btn").removeAttr("disabled").removeAttr("title");
+            }
+            $("#log_truncated_notice").toggle(data.truncated == true);
+
+            logsRawLines = (data.content || "").split("\n");
+            renderLogContent();
+        });
+    }
+
+    // Render the loaded log with category colors + active filters.
+    // Continuation lines (indented, no leading "[") belong to the previous
+    // entry and inherit its visibility.
+    function renderLogContent(){
+        let filterText = $("#log_filter_text").val().toLowerCase();
+        let filterCategory = $("#log_filter_category").val();
+
+        let html = "";
+        let currentEntryVisible = true;
+        let currentEntryLines = [];
+
+        function entryMatches(lines){
+            if (filterText == ""){ return true; }
+            return lines.some(function(l){ return l.toLowerCase().includes(filterText); });
+        }
+
+        function flushEntry(){
+            if (currentEntryLines.length == 0 || !currentEntryVisible){ currentEntryLines = []; return; }
+            if (!entryMatches(currentEntryLines)){ currentEntryLines = []; return; }
+            currentEntryLines.forEach(function(line){
+                let m = line.match(/^\[([^\]]+)\] \[([a-z]+)\] (.*)$/);
+                if (m){
+                    let lineClass = /failed|error|critical/i.test(m[3]) ? "log-line-error" : "";
+                    html += `<div class="${lineClass}"><span class="log-time">[${logsEsc(m[1])}]</span> <span class="log-cat log-cat-${logsEsc(m[2])}">[${logsEsc(m[2])}]</span> ${logsEsc(m[3])}</div>`;
+                }else{
+                    html += `<div>${logsEsc(line)}</div>`;
+                }
+            });
+            currentEntryLines = [];
+        }
+
+        logsRawLines.forEach(function(line){
+            if (line.startsWith("[")){
+                // New entry begins, flush the previous one first
+                flushEntry();
+                let m = line.match(/^\[[^\]]+\] \[([a-z]+)\]/);
+                currentEntryVisible = (filterCategory == "" || (m && m[1] == filterCategory));
+                currentEntryLines = [line];
+            }else if (line != "" || currentEntryLines.length > 0){
+                currentEntryLines.push(line);
+            }
+        });
+        flushEntry();
+
+        if (html == ""){
+            html = '<div style="opacity: 0.6;">(no matching log entries)</div>';
+        }
+        let viewer = $("#log_viewer");
+        viewer.html(html);
+        // Newest entries are at the bottom
+        viewer.scrollTop(viewer[0].scrollHeight);
+    }
+
+    /* Delete */
+    function showDeleteLogWarning(){
+        if (logsSelectedIsCurrent){ return; }
+        $("#log_delete_target").text(logsSelectedFile);
+        $("#log_delete_warning")[0].showModal();
+    }
+
+    function confirmDeleteLog(){
+        $("#log_delete_warning")[0].close();
+        $.cjax({
+            url: "./api/logs/delete",
+            method: "POST",
+            data: { file: logsSelectedFile },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("log_deleted_succ"));
+                    logsSelectedFile = null;
+                }
+                initLogsTab();
+            }
+        });
+    }
+
+    initLogsTab();
+</script>

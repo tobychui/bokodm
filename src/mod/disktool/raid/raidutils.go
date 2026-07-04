@@ -10,7 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"imuslab.com/bokofs/bokofsd/mod/disktool/diskfs"
+	"imuslab.com/bokodm/bokodmd/mod/disktool/diskfs"
+	"imuslab.com/bokodm/bokodmd/mod/utils"
 )
 
 // Get the next avaible RAID array name
@@ -123,7 +124,7 @@ func (m *Manager) RestartRAIDService() error {
 	cmd := exec.Command("sudo", "mdadm", "--assemble", "--scan")
 
 	// Run the command
-	output, err := cmd.CombinedOutput()
+	output, err := utils.RunAndStream(cmd)
 	if err != nil {
 		if string(output) == "" {
 			//Nothing updated in config.
@@ -140,9 +141,9 @@ func (m *Manager) StopRAIDDevice(devicePath string) error {
 	cmd := exec.Command("sudo", "mdadm", "--stop", devicePath)
 
 	// Run the command
-	err := cmd.Run()
+	output, err := utils.RunAndStream(cmd)
 	if err != nil {
-		return fmt.Errorf("error stopping RAID device: %v", err)
+		return fmt.Errorf("error stopping RAID device: %v (%s)", err, strings.TrimSpace(string(output)))
 	}
 
 	return nil
@@ -154,7 +155,7 @@ func (m *Manager) RemoveRAIDMember(devicePath string) error {
 	cmd := exec.Command("sudo", "mdadm", "--remove", devicePath)
 
 	// Run the command
-	output, err := cmd.CombinedOutput()
+	output, err := utils.RunAndStream(cmd)
 	if err != nil {
 		// If there was an error, return the combined output and the error message
 		return fmt.Errorf("error removing RAID device: %s", strings.TrimSpace(string(output)))

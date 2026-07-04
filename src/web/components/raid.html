@@ -131,6 +131,114 @@
         </div>
     </dialog>
 
+    <!-- RAID Member Disk Operation Warning (fail / remove) -->
+    <dialog id="raid_member_op_warning" class="ts-modal">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header">
+                    <span class="member-op-fail" i18n>Confirm marking disk as failed?
+                        // 確認將磁碟標記為故障？
+                    </span>
+                    <span class="member-op-remove" i18n>Confirm removing disk from array?
+                        // 確認從陣列中移除磁碟？
+                    </span>
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content">
+                <div class="ts-text is-description">
+                    <span class="member-op-target ts-text is-code"></span><br>
+                    <span class="member-op-fail" i18n>The disk will be marked as faulty and the array will run in degraded mode until a replacement disk is added.
+                        // 該磁碟將被標記為故障，陣列將以降級模式運行，直到加入替換磁碟為止。
+                    </span>
+                    <span class="member-op-remove" i18n>The disk will be detached from the RAID array. You can then physically replace it and add a new disk to rebuild the array.
+                        // 該磁碟將從 RAID 陣列中分離。之後您可以更換硬碟並加入新磁碟以重建陣列。
+                    </span>
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-negative" onclick="confirmMemberDiskOp();" i18n>Confirm
+                        // 確認
+                    </button>
+                    <button class="ts-button" onclick="$('#raid_member_op_warning')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- RAID Add / Replace Disk Dialog -->
+    <dialog id="raid_add_disk" class="ts-modal">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header" i18n>Add disk to RAID array
+                    // 新增磁碟到 RAID 陣列
+                </div>
+                <div class="ts-text is-description" i18n>Select a disk to add to <span class="add-disk-target"></span>. If the array is degraded, the new disk will be used to rebuild it. Otherwise it will be added as a hot spare.
+                    // 選擇要加入 <span class="add-disk-target"></span> 的磁碟。如果陣列處於降級狀態，新磁碟將用於重建陣列，否則將作為熱備援磁碟加入。
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content">
+                <div id="raid_add_disk_candidates">
+                    <div class="ts-blankslate" style="pointer-events: none; user-select: none; opacity: 0.7;">
+                        <div class="description">
+                            <span class="ts-icon is-circle-notch-icon is-spinning"></span>
+                            <span class="has-start-spaced-small">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="ts-notice is-negative has-top-spaced-small">
+                    <div class="content" i18n>All data on the selected disk will be erased.
+                        // 所選磁碟上的所有資料將被清除。
+                    </div>
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-negative" id="raid_add_disk_confirm_btn" onclick="confirmAddDiskToArray();" disabled i18n>Add Disk
+                        // 加入磁碟
+                    </button>
+                    <button class="ts-button" onclick="$('#raid_add_disk')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- RAID Grow Warning Dialog -->
+    <dialog id="raid_grow_warning" class="ts-modal">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header" i18n>Expand RAID array to maximum size?
+                    // 將 RAID 陣列擴充至最大容量？
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content">
+                <div class="ts-text is-description" i18n>This will grow the array to the maximum possible size of the current member disks. This is useful after replacing all disks with larger ones. The array must be healthy before expansion.
+                    // 這將把陣列擴充到目前成員磁碟的最大可能容量。在將所有磁碟更換為更大的磁碟後，此功能非常有用。擴充前陣列必須處於健康狀態。
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-negative" onclick="confirmGrowRAIDArray();" i18n>Confirm
+                        // 確認
+                    </button>
+                    <button class="ts-button" onclick="$('#raid_grow_warning')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
     <!-- RAID Creation Dialog -->
     <dialog id="raid_new" class="ts-modal is-big mobile:is-fullscreen"></dialog>
 
@@ -415,26 +523,32 @@
                     </div>
                     <!-- Child Disks -->
                     <div class="has-top-spaced-small">
-                        ${getRAIDChildDiskElement(raid.DeviceInfo)}
+                        ${getRAIDChildDiskElement(raid.DeviceInfo, mdX)}
                     </div>
                     <!-- Operations -->
                     <div class="has-top-spaced-small">
                         <div class="ts-box">
                             <div class="ts-content">
-                                <!-- 
-                                <button class="ts-button is-start-icon is-positive is-circular" onclick="" >
-                                    <span class="ts-icon is-rotate-icon" style="color: var(--ts-primary-500);"></span>
-                                    <span i18n> Assemble
-                                        // 重組陣列
+                                <div class="ts-wrap">
+                                <button onclick="showAddDiskDialog('${mdX}');" class="ts-button is-circular is-start-icon is-positive">
+                                    <span class="ts-icon is-circle-plus-icon" style="color: var(--ts-positive-500);"></span>
+                                    <span i18n> Add / Replace Disk
+                                        // 新增 / 更換磁碟
                                     </span>
                                 </button>
-                                -->
-                                <button onclick="showDeleteRAIDWarning('${raid.DevicePath}');" class="ts-button is-circular is-start-icon is-negative"> 
+                                <button onclick="showGrowRAIDWarning('${mdX}');" class="ts-button is-circular is-start-icon is-positive">
+                                    <span class="ts-icon is-maximize-icon" style="color: var(--ts-primary-500);"></span>
+                                    <span i18n> Expand Array
+                                        // 擴充陣列
+                                    </span>
+                                </button>
+                                <button onclick="showDeleteRAIDWarning('${raid.DevicePath}');" class="ts-button is-circular is-start-icon is-negative">
                                     <span class="ts-icon is-trash-icon"></span>
                                     <span i18n> Delete RAID
                                         // 刪除陣列
                                     </span>
                                 </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -498,7 +612,7 @@
     }
 
     // DOM elements for child disks
-    function getRAIDChildDiskElement(raidDeviceInfo){
+    function getRAIDChildDiskElement(raidDeviceInfo, mdX){
         if (raidDeviceInfo.length == 0 || raidDeviceInfo == null){
             return `<div class="ts-blankslate" style="pointer-events: none; user-select: none; opacity: 0.7;">
                 <div class="description" i18n>No assigned disks
@@ -511,7 +625,8 @@
         let result = '';
         for (let i = 0; i < raidDeviceInfo.length; i++) {
             let disk = raidDeviceInfo[i];
-            if (disk.RaidDevice == -1){
+            if (disk.RaidDevice == -1 && disk.DevicePath == ""){
+                //Removed slot with no physical disk attached
                 continue;
             }
 
@@ -537,18 +652,55 @@
                     }
                 });
             }
-            result += `<div class="ts-box is-padded has-bottom-spaced-small raid-child-disk" diskid="${elementUUID}">
+
+            let isFaulty = disk.State.includes('faulty');
+            let isSpare = disk.State.includes('spare');
+            let stateBadge = '';
+            if (isFaulty){
+                stateBadge = `<span class="ts-badge is-negative has-start-spaced-small">FAULTY</span>`;
+            }else if (isSpare){
+                stateBadge = `<span class="ts-badge has-start-spaced-small">SPARE</span>`;
+            }
+
+            //Per-disk operations: healthy disks can be marked as failed,
+            //faulty disks can be removed from the array (for swapping)
+            let diskOprBtns = '';
+            if (isFaulty){
+                diskOprBtns = `<button class="ts-button is-small is-negative is-circular is-start-icon" onclick="showRemoveDiskWarning('${mdX}', '${disk.DevicePath}');">
+                    <span class="ts-icon is-eject-icon"></span>
+                    <span i18n>Remove from Array
+                    // 從陣列中移除
+                    </span>
+                </button>`;
+            }else{
+                diskOprBtns = `<button class="ts-button is-small is-outlined is-circular is-start-icon" onclick="showFailDiskWarning('${mdX}', '${disk.DevicePath}');">
+                    <span class="ts-icon is-triangle-exclamation-icon" style="color: var(--ts-warning-600);"></span>
+                    <span i18n>Mark as Failed
+                    // 標記為故障
+                    </span>
+                </button>`;
+            }
+
+            result += `<div class="ts-box is-padded has-bottom-spaced-small raid-child-disk" diskid="${elementUUID}" ${isFaulty?'style="border-left: 4px solid var(--ts-negative-500);"':''}>
                 <div class="ts-content">
-                    <div>
-                        <span class="ts-badge is-secondary has-end-spaced-small" style="margin-top: -0.3em;">${disk.DevicePath}</span>
-                        <span class="ts-text is-heavy raid-disk-name">Raid Device ${disk.RaidDevice}</span>
-                    </div>
-                    <div class="ts-text is-tiny has-top-spaced-small">
-                    <div class="has-start-spaced-small">
-                        <span i18n> State
-                        // 狀態
-                        </span>: ${disk.State.join(', ')}
-                    </div>
+                    <div class="ts-grid mobile:is-stacked">
+                        <div class="column is-fluid">
+                            <div>
+                                <span class="ts-badge is-secondary has-end-spaced-small" style="margin-top: -0.3em;">${disk.DevicePath}</span>
+                                <span class="ts-text is-heavy raid-disk-name">Raid Device ${disk.RaidDevice}</span>
+                                ${stateBadge}
+                            </div>
+                            <div class="ts-text is-tiny has-top-spaced-small">
+                            <div class="has-start-spaced-small">
+                                <span i18n> State
+                                // 狀態
+                                </span>: ${disk.State.join(', ')}
+                            </div>
+                            </div>
+                        </div>
+                        <div class="column" style="display: flex; align-items: center;">
+                            ${diskOprBtns}
+                        </div>
                     </div>
                 </div>
             </div>`;
@@ -680,10 +832,12 @@
             devname = '/dev/' + devname;
         }
         $('#raid_remove_warning')[0].close();
+        showLoading("Deleting RAID array...");
         $.cjax({
             url: './api/raid/delete',
             method: 'POST',
             data: { "raidDev": devname},
+            complete: function(){ hideLoading(); },
             success: function(data) {
                 if (data.error != undefined){
                     // Handle error response
@@ -705,6 +859,168 @@
 
     function cancelRAIDDelete(){
         $('#raid_remove_warning')[0].close();
+    }
+
+    /* Member disk operations (fail / remove / add) */
+    var memberOpPending = null; // {op: "fail"|"remove", mdX: "md0", memDev: "/dev/sdX"}
+
+    function showFailDiskWarning(mdX, memDev){
+        memberOpPending = {op: "fail", mdX: mdX, memDev: memDev};
+        $("#raid_member_op_warning .member-op-fail").show();
+        $("#raid_member_op_warning .member-op-remove").hide();
+        $("#raid_member_op_warning .member-op-target").text(memDev + " @ /dev/" + mdX);
+        $('#raid_member_op_warning')[0].showModal();
+    }
+
+    function showRemoveDiskWarning(mdX, memDev){
+        memberOpPending = {op: "remove", mdX: mdX, memDev: memDev};
+        $("#raid_member_op_warning .member-op-fail").hide();
+        $("#raid_member_op_warning .member-op-remove").show();
+        $("#raid_member_op_warning .member-op-target").text(memDev + " @ /dev/" + mdX);
+        $('#raid_member_op_warning')[0].showModal();
+    }
+
+    function confirmMemberDiskOp(){
+        $('#raid_member_op_warning')[0].close();
+        if (memberOpPending == null){
+            return;
+        }
+        let op = memberOpPending.op;
+        let mdX = memberOpPending.mdX;
+        let memDev = memberOpPending.memDev;
+        memberOpPending = null;
+        showLoading("Updating RAID member disk...");
+        $.cjax({
+            url: './api/raid/' + op,
+            method: 'POST',
+            data: { "raidDev": "/dev/" + mdX, "memDev": memDev },
+            complete: function(){ hideLoading(); },
+            success: function(data) {
+                if (data.error != undefined){
+                    console.error('Error performing disk operation:', data.error);
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(op == "fail" ? i18nc("raid_disk_failed_succ") : i18nc("raid_disk_removed_succ"));
+                    setTimeout(function() {
+                        updateRAIDArrayStatus(mdX);
+                    }, 300);
+                }
+            },
+        });
+    }
+
+    /* Add / replace disk */
+    var addDiskPending = null; // {mdX: "md0", memDev: "sdX" or null}
+
+    function showAddDiskDialog(mdX){
+        addDiskPending = {mdX: mdX, memDev: null};
+        $(".add-disk-target").text("/dev/" + mdX);
+        $("#raid_add_disk_confirm_btn").attr("disabled", true);
+        $('#raid_add_disk')[0].showModal();
+        loadAddDiskCandidates();
+    }
+
+    function loadAddDiskCandidates(){
+        $("#raid_add_disk_candidates").html(`
+            <div class="ts-blankslate" style="pointer-events: none; user-select: none; opacity: 0.7;">
+                <div class="description">
+                    <span class="ts-icon is-circle-notch-icon is-spinning"></span>
+                    <span class="has-start-spaced-small">Loading...</span>
+                </div>
+            </div>`);
+        $.get('./api/raid/candidates', function(data){
+            if (data.error != undefined){
+                $("#raid_add_disk_candidates").html(`<div class="ts-text is-negative">Error: ${data.error}</div>`);
+                return;
+            }
+            if (data.length == 0){
+                $("#raid_add_disk_candidates").html(`
+                    <div class="ts-blankslate">
+                        <div class="description" i18n>No usable disk found. Insert a new disk that is not mounted and not used by another RAID array.
+                            // 找不到可用的磁碟。請插入未掛載且未被其他 RAID 陣列使用的新磁碟。
+                        </div>
+                    </div>`);
+                relocale();
+                return;
+            }
+            let html = '<div class="ts-menu is-separated">';
+            data.forEach(function(disk){
+                html += `<a class="item raid-add-disk-candidate" devname="${disk.name}" onclick="selectAddDiskCandidate(this);">
+                    <img src="./img/icons/drive.svg" style="width: 2.4em; height: 2.4em; object-fit: contain;">
+                    <div class="ts-content is-dense">
+                        <div><span class="ts-text is-heavy">/dev/${disk.name}</span></div>
+                        <div class="ts-text is-tiny">${bytesToHumanReadable(disk.size)}</div>
+                    </div>
+                    <span class="candidate-selected-icon ts-icon is-circle-check-icon" style="display:none; color: var(--ts-positive-500); margin-left: auto;"></span>
+                </a>`;
+            });
+            html += '</div>';
+            $("#raid_add_disk_candidates").html(html);
+        });
+    }
+
+    function selectAddDiskCandidate(ele){
+        $(".raid-add-disk-candidate").removeClass("is-active").find(".candidate-selected-icon").hide();
+        $(ele).addClass("is-active").find(".candidate-selected-icon").show();
+        addDiskPending.memDev = $(ele).attr("devname");
+        $("#raid_add_disk_confirm_btn").removeAttr("disabled");
+    }
+
+    function confirmAddDiskToArray(){
+        if (addDiskPending == null || addDiskPending.memDev == null){
+            return;
+        }
+        let mdX = addDiskPending.mdX;
+        let memDev = addDiskPending.memDev;
+        $('#raid_add_disk')[0].close();
+        addDiskPending = null;
+        showLoading("Adding disk to RAID array...");
+        $.cjax({
+            url: './api/raid/add',
+            method: 'POST',
+            data: { "raidDev": "/dev/" + mdX, "memDev": "/dev/" + memDev },
+            complete: function(){ hideLoading(); },
+            success: function(data) {
+                if (data.error != undefined){
+                    console.error('Error adding disk to RAID array:', data.error);
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("raid_disk_added_succ"));
+                    setTimeout(function() {
+                        updateRAIDArrayStatus(mdX);
+                    }, 300);
+                }
+            },
+        });
+    }
+
+    /* Grow / expand array */
+    function showGrowRAIDWarning(mdX){
+        $('#raid_grow_warning').attr("devname", mdX);
+        $('#raid_grow_warning')[0].showModal();
+    }
+
+    function confirmGrowRAIDArray(){
+        let mdX = $('#raid_grow_warning').attr("devname");
+        $('#raid_grow_warning')[0].close();
+        showLoading("Expanding RAID array...");
+        $.cjax({
+            url: './api/raid/grow',
+            method: 'POST',
+            data: { "raidDev": mdX },
+            complete: function(){ hideLoading(); },
+            success: function(data) {
+                if (data.error != undefined){
+                    console.error('Error growing RAID array:', data.error);
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("raid_grow_succ"));
+                    setTimeout(function() {
+                        updateRAIDArrayStatus(mdX);
+                    }, 300);
+                }
+            },
+        });
     }
 
     /* Create RAID */
@@ -736,6 +1052,7 @@
         console.log(diskNames, raidType, arrayName, formatSuperBlock);
         
         //Make a request to create the new RAID array
+        showLoading("Creating RAID array...");
         $.cjax({
             url: './api/raid/create',
             method: 'POST',
@@ -746,6 +1063,7 @@
                 "spareDev":JSON.stringify([]),
                 "zerosuperblock": formatSuperBlock
             },
+            complete: function(){ hideLoading(); },
             success: function(data) {
                 if (data.error != undefined){
                     // Handle error response

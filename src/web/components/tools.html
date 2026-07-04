@@ -1,0 +1,1222 @@
+<style>
+    .pt-disk-bar{
+        display: flex;
+        width: 100%;
+        height: 46px;
+        border: 1px solid var(--ts-gray-300);
+        border-radius: 0.4em;
+        overflow: hidden;
+        background: var(--ts-gray-75);
+    }
+    .pt-disk-bar .pt-segment{
+        position: relative;
+        min-width: 1.2%;
+        border-right: 1px solid var(--ts-gray-50);
+        box-sizing: border-box;
+    }
+    .pt-disk-bar .pt-segment:last-child{
+        border-right: none;
+    }
+    .pt-disk-bar .pt-segment.free{
+        background: repeating-linear-gradient(
+            45deg,
+            var(--ts-gray-100),
+            var(--ts-gray-100) 6px,
+            var(--ts-gray-200) 6px,
+            var(--ts-gray-200) 12px
+        );
+    }
+    .pt-segment-label{
+        position: absolute;
+        left: 0.4em;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 0.75em;
+        color: #fff;
+        text-shadow: 0 0 3px rgba(0,0,0,0.6);
+        white-space: nowrap;
+        overflow: hidden;
+        max-width: 95%;
+        pointer-events: none;
+    }
+    .pt-segment.free .pt-segment-label{
+        color: var(--ts-gray-600);
+        text-shadow: none;
+    }
+    .pt-fs-legend{
+        display: inline-block;
+        width: 0.9em;
+        height: 0.9em;
+        border-radius: 0.2em;
+        margin-right: 0.3em;
+        vertical-align: -0.1em;
+    }
+    /* Keep long model names inside the disk selector items */
+    #pt_disk_list .item{
+        overflow: hidden;
+    }
+    #pt_disk_list .item img{
+        flex-shrink: 0;
+    }
+    #pt_disk_list .item .ts-content{
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+    }
+    #pt_disk_list .item .ts-text.is-heavy{
+        display: inline-block;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        vertical-align: bottom;
+    }
+</style>
+<div class="ts-content">
+    <div class="ts-container is-padded">
+        <div class="ts-header is-large is-heavy" i18n>Disk Partitioning &amp; Formatting
+            // 磁碟分割與格式化
+        </div>
+        <p class="ts-text is-description" i18n>Create, delete and format partitions on non-system disks. Disks running the operating system or belonging to a RAID array are protected and not shown here.
+            // 在非系統磁碟上建立、刪除和格式化分割區。執行作業系統或屬於 RAID 陣列的磁碟受到保護，不會顯示在此處。
+        </p>
+
+        <!-- Missing parted notice -->
+        <div id="pt-tool-warning" class="ts-box is-padded has-top-spaced-large" style="display:none; border-left: 4px solid var(--ts-warning-400, #faad14);">
+            <div class="ts-content">
+                <div class="ts-header is-heavy" i18n>Partitioning tool unavailable
+                    // 分割工具不可用
+                </div>
+                <p i18n>
+                    <code>parted</code> was not found on this system. Install it to enable disk partitioning. All other features keep working.
+                    // 系統中找不到 <code>parted</code>。請安裝它以啟用磁碟分割功能。其他功能不受影響。
+                </p>
+                <div id="pt-install-hint" style="font-size:0.9em; color: var(--ts-gray-600);"></div>
+            </div>
+        </div>
+
+        <div id="pt-main" class="ts-grid mobile:is-stacked has-top-spaced-large">
+            <!-- Disk selector -->
+            <div class="column is-5-wide">
+                <div class="ts-text is-label has-bottom-spaced-small" i18n>Editable Disks
+                    // 可編輯的磁碟
+                </div>
+                <div id="pt_disk_list" class="ts-menu is-separated">
+                    <div class="ts-blankslate" style="pointer-events: none; user-select: none; opacity: 0.7;">
+                        <div class="description">
+                            <span class="ts-icon is-circle-notch-icon is-spinning"></span>
+                            <span class="has-start-spaced-small">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="ts-divider has-top-spaced-small"></div>
+                <div class="ts-content is-center-aligned">
+                    <button onclick="initPartToolDisks();" class="ts-button is-start-icon is-circular">
+                        <span class="ts-icon is-rotate-icon"></span>
+                        <span i18n>Refresh
+                            // 重新整理
+                        </span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Disk layout -->
+            <div class="column is-fluid">
+                <div id="pt_disk_view">
+                    <div class="ts-blankslate">
+                        <span class="ts-icon is-hard-drive-icon"></span>
+                        <div class="description" i18n>Select a disk on the left to view and edit its partition layout.
+                            // 從左側選擇磁碟以檢視和編輯其分割區配置。
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New partition table dialog -->
+    <dialog id="pt_mklabel_dialog" class="ts-modal">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header" i18n>Create new partition table
+                    // 建立新的分割表
+                </div>
+                <div class="ts-text is-description is-code" id="pt_mklabel_target"></div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content">
+                <div class="ts-text is-label" i18n>Partition Table Type
+                    // 分割表類型
+                </div>
+                <div class="ts-select is-fluid has-top-spaced-small">
+                    <select id="pt_mklabel_type">
+                        <option value="gpt">GPT (recommended)</option>
+                        <option value="msdos">MBR / msdos (legacy)</option>
+                    </select>
+                </div>
+                <div class="ts-notice is-negative has-top-spaced">
+                    <div class="title" i18n>All data on this disk will be destroyed
+                        // 此磁碟上的所有資料將被銷毀
+                    </div>
+                    <div class="content" i18n>Every partition and all files on this disk will be permanently erased. This cannot be undone.
+                        // 此磁碟上的每個分割區和所有檔案將被永久清除，且無法復原。
+                    </div>
+                </div>
+                <label class="ts-checkbox has-top-spaced">
+                    <input type="checkbox" id="pt_mklabel_understand">
+                    <span i18n>I understand all data on this disk will be lost
+                        // 我了解此磁碟上的所有資料將會遺失
+                    </span>
+                </label>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-negative" onclick="confirmMklabel();" i18n>Create Table
+                        // 建立分割表
+                    </button>
+                    <button class="ts-button" onclick="$('#pt_mklabel_dialog')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- New partition dialog -->
+    <dialog id="pt_mkpart_dialog" class="ts-modal">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header" i18n>Create new partition
+                    // 建立新分割區
+                </div>
+                <div class="ts-text is-description">
+                    <span class="is-code" id="pt_mkpart_target"></span>
+                    &nbsp;—&nbsp;
+                    <span i18n>free space
+                        // 可用空間
+                    </span>: <span id="pt_mkpart_freesize"></span>
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content">
+                <div class="ts-text is-label" i18n>Partition Size (MB)
+                    // 分割區大小 (MB)
+                </div>
+                <div class="ts-input is-fluid has-top-spaced-small">
+                    <input type="number" id="pt_mkpart_size" min="1">
+                </div>
+                <label class="ts-checkbox has-top-spaced-small">
+                    <input type="checkbox" id="pt_mkpart_full" onchange="ptMkpartFullToggle();" checked>
+                    <span i18n>Use all free space
+                        // 使用全部可用空間
+                    </span>
+                </label>
+
+                <div class="ts-text is-label has-top-spaced" i18n>File System
+                    // 檔案系統
+                </div>
+                <div class="ts-select is-fluid has-top-spaced-small">
+                    <select id="pt_mkpart_fs">
+                        <option value="ext4">ext4</option>
+                        <option value="ntfs">NTFS</option>
+                        <option value="fat32">FAT32</option>
+                        <option value="" i18n>Unallocated // 不格式化</option>
+                    </select>
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-positive" onclick="confirmMkpart();" i18n>Create Partition
+                        // 建立分割區
+                    </button>
+                    <button class="ts-button" onclick="$('#pt_mkpart_dialog')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Format partition dialog -->
+    <dialog id="pt_format_dialog" class="ts-modal">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header" i18n>Format partition
+                    // 格式化分割區
+                </div>
+                <div class="ts-text is-description is-code" id="pt_format_target"></div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content">
+                <div class="ts-text is-label" i18n>File System
+                    // 檔案系統
+                </div>
+                <div class="ts-select is-fluid has-top-spaced-small">
+                    <select id="pt_format_fs">
+                        <option value="ext4">ext4</option>
+                        <option value="ntfs">NTFS</option>
+                        <option value="fat32">FAT32</option>
+                    </select>
+                </div>
+                <div class="ts-notice is-negative has-top-spaced">
+                    <div class="content" i18n>All data on this partition will be erased.
+                        // 此分割區上的所有資料將被清除。
+                    </div>
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-negative" onclick="confirmFormatPartition();" i18n>Format
+                        // 格式化
+                    </button>
+                    <button class="ts-button" onclick="$('#pt_format_dialog')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Delete partition dialog -->
+    <dialog id="pt_delete_dialog" class="ts-modal">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header" i18n>Confirm delete partition?
+                    // 確認刪除分割區？
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content">
+                <div class="ts-text is-description">
+                    <span class="is-code" id="pt_delete_target"></span><br>
+                    <span i18n>The partition and all data on it will be permanently removed.
+                        // 該分割區及其上的所有資料將被永久移除。
+                    </span>
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-negative" onclick="confirmDeletePartition();" i18n>Delete
+                        // 刪除
+                    </button>
+                    <button class="ts-button" onclick="$('#pt_delete_dialog')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Delete selected partitions dialog -->
+    <dialog id="pt_delete_selected_dialog" class="ts-modal">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header" i18n>Confirm delete selected partitions?
+                    // 確認刪除所選分割區？
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content">
+                <div class="ts-text is-description">
+                    <span class="is-code" id="pt_delete_selected_list"></span><br>
+                    <span i18n>The selected partitions and all data on them will be permanently removed.
+                        // 所選分割區及其上的所有資料將被永久移除。
+                    </span>
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-negative" onclick="confirmDeleteSelected();" i18n>Delete
+                        // 刪除
+                    </button>
+                    <button class="ts-button" onclick="$('#pt_delete_selected_dialog')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Extend partition dialog -->
+    <dialog id="pt_extend_dialog" class="ts-modal">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header" i18n>Extend partition
+                    // 擴充分割區
+                </div>
+                <div class="ts-text is-description">
+                    <span class="is-code" id="pt_extend_target"></span><br>
+                    <span i18n>Current size // 目前大小</span>: <span id="pt_extend_current"></span>
+                    &nbsp;•&nbsp;
+                    <span i18n>Unused space after // 之後的可用空間</span>: <span id="pt_extend_available"></span>
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content">
+                <div class="ts-text is-label" i18n>Grow By (MB)
+                    // 擴充大小 (MB)
+                </div>
+                <div class="ts-input is-fluid has-top-spaced-small">
+                    <input type="number" id="pt_extend_size" min="1">
+                </div>
+                <label class="ts-checkbox has-top-spaced-small">
+                    <input type="checkbox" id="pt_extend_full" onchange="ptExtendFullToggle();" checked>
+                    <span i18n>Use all unused space after this partition
+                        // 使用此分割區之後的全部可用空間
+                    </span>
+                </label>
+                <div class="ts-notice has-top-spaced">
+                    <div class="content" i18n>The filesystem will be grown to fill the new partition size. Only the unused space directly after this partition is used, other partitions are not touched.
+                        // 檔案系統將擴充至新的分割區大小。僅使用此分割區之後的未使用空間，不會影響其他分割區。
+                    </div>
+                </div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-positive" onclick="confirmExtendPartition();" i18n>Extend
+                        // 擴充
+                    </button>
+                    <button class="ts-button" onclick="$('#pt_extend_dialog')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Recreate disk layout dialog -->
+    <dialog id="pt_recreate_dialog" class="ts-modal is-big">
+        <div class="content">
+            <div class="ts-content">
+                <div class="ts-header" i18n>Recreate disk with new layout
+                    // 以新配置重建磁碟
+                </div>
+                <div class="ts-text is-description is-code" id="pt_recreate_target"></div>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content" style="max-height: 55vh; overflow-y: auto;">
+                <div class="ts-text is-label" i18n>Partition Table Type
+                    // 分割表類型
+                </div>
+                <div class="ts-select is-fluid has-top-spaced-small">
+                    <select id="pt_recreate_table">
+                        <option value="gpt">GPT (recommended)</option>
+                        <option value="msdos">MBR / msdos (legacy, max 4 partitions)</option>
+                    </select>
+                </div>
+
+                <div class="ts-text is-label has-top-spaced" i18n>Partitions
+                    // 分割區
+                </div>
+                <table class="ts-table is-dense has-top-spaced-small">
+                    <thead>
+                        <tr>
+                            <th style="width: 2.5em;">#</th>
+                            <th i18n>Size // 大小</th>
+                            <th i18n>File System // 檔案系統</th>
+                            <th style="width: 6em;" i18n>Order // 順序</th>
+                            <th style="width: 3em;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="pt_recreate_rows"></tbody>
+                </table>
+                <button class="ts-button is-small is-outlined is-start-icon has-top-spaced-small" onclick="addRecreateRow();">
+                    <span class="ts-icon is-circle-plus-icon"></span>
+                    <span i18n>Add Partition // 新增分割區</span>
+                </button>
+                <div class="ts-text is-tiny is-description has-top-spaced-small" id="pt_recreate_summary"></div>
+
+                <div class="ts-notice is-negative has-top-spaced">
+                    <div class="title" i18n>All data on this disk will be destroyed
+                        // 此磁碟上的所有資料將被銷毀
+                    </div>
+                    <div class="content" i18n>The existing partition table and every file on this disk will be permanently erased, then the new layout is created and formatted.
+                        // 現有的分割表和此磁碟上的所有檔案將被永久清除，然後建立並格式化新的配置。
+                    </div>
+                </div>
+                <label class="ts-checkbox has-top-spaced">
+                    <input type="checkbox" id="pt_recreate_understand">
+                    <span i18n>I understand all data on this disk will be lost
+                        // 我了解此磁碟上的所有資料將會遺失
+                    </span>
+                </label>
+            </div>
+            <div class="ts-divider"></div>
+            <div class="ts-content is-tertiary">
+                <div class="ts-wrap is-end-aligned">
+                    <button class="ts-button is-negative" onclick="confirmRecreate();" i18n>Recreate Disk
+                        // 重建磁碟
+                    </button>
+                    <button class="ts-button" onclick="$('#pt_recreate_dialog')[0].close();" i18n>Cancel
+                        // 取消
+                    </button>
+                </div>
+            </div>
+        </div>
+    </dialog>
+</div>
+<script>
+    var ptDisks = [];
+    var ptSelectedDisk = null;   // disk name, e.g. "sdb"
+    var ptPendingAction = null;  // context object for the open dialog
+
+    var ptFsColors = {
+        "ext4": "#66bb6a", "ext3": "#81c784", "ext2": "#81c784",
+        "ntfs": "#42a5f5", "fat32": "#ffa726", "fat16": "#ffb74d",
+        "vfat": "#ffa726", "exfat": "#ffca28",
+        "linux-swap(v1)": "#ab47bc", "linux-swap": "#ab47bc",
+        "xfs": "#26a69a", "btrfs": "#7e57c2",
+    };
+
+    function ptHumanSize(size) {
+        if (size === undefined || size === null || size < 0 || isNaN(size)) return "-";
+        var i = size == 0 ? 0 : Math.floor(Math.log(size) / Math.log(1024));
+        return +((size / Math.pow(1024, i)).toFixed(1)) * 1 + ' ' + ['B', 'kB', 'MB', 'GB', 'TB'][i];
+    }
+
+    function ptEsc(text){
+        if (text === undefined || text === null || text === "") return "";
+        return $("<span>").text(text).html();
+    }
+
+    function ptFsColor(fstype){
+        return ptFsColors[fstype] || "#9e9e9e";
+    }
+
+    function ptShowMissingTool(){
+        $("#pt-main").hide();
+        $("#pt-tool-warning").show();
+        var report = window.bokoDepReport;
+        if (report && report.deps){
+            var dep = report.deps.find(function(d){ return d.name === "parted"; });
+            if (dep && dep.installHints && dep.installHints.length > 0){
+                $("#pt-install-hint").html("&#128161; <code>" + dep.installHints[0] + "</code>");
+            }
+        }
+    }
+
+    /* Disk list */
+    function initPartToolDisks(){
+        $.get("./api/parttool/list", function(data){
+            if (data.error != undefined){
+                if (String(data.error).includes("not installed")){
+                    ptShowMissingTool();
+                }else{
+                    msgbox("Error: " + data.error);
+                }
+                return;
+            }
+            $("#pt-tool-warning").hide();
+            $("#pt-main").show();
+            ptDisks = data;
+            let list = $("#pt_disk_list");
+            list.empty();
+            if (data.length == 0){
+                list.append(`<div class="ts-blankslate" style="pointer-events: none; user-select: none; opacity: 0.7;">
+                    <div class="description" i18n>No editable disk found. System disks and RAID members are hidden.
+                        // 找不到可編輯的磁碟。系統磁碟和 RAID 成員已隱藏。
+                    </div>
+                </div>`);
+                $("#pt_disk_view").html("");
+                relocale();
+                return;
+            }
+            data.forEach(function(disk){
+                let icon = disk.isRaidVolume ? "./img/icons/cluster.svg" : "./img/icons/drive.svg";
+                let raidBadge = disk.isRaidVolume ? '<span class="ts-badge" style="margin-top:-3px;">RAID</span>' : "";
+                list.append(`<a class="item pt-disk-item" devname="${disk.name}" onclick="showPtDisk('${disk.name}');">
+                    <img src="${icon}" style="width: 2.6em; height: 2.6em; object-fit: contain;">
+                    <div class="ts-content is-dense">
+                        <div>
+                            <span class="ts-text is-heavy">${ptEsc(disk.model) || disk.path}</span><br>
+                            <span class="ts-badge is-secondary" style="margin-top:0.6em;">${ptHumanSize(disk.sizeByte)}</span>
+                            ${raidBadge}
+                        </div>
+                        <div class="ts-text is-tiny has-top-spaced-small">${disk.path} &nbsp; ${disk.table == "none" ? "no partition table" : disk.table}</div>
+                    </div>
+                </a>`);
+            });
+
+            // Restore the previous selection or select the first disk
+            let target = data.find(function(d){ return d.name == ptSelectedDisk; });
+            showPtDisk(target ? target.name : data[0].name);
+            relocale();
+        });
+    }
+
+    /* Disk layout view */
+    function showPtDisk(diskName){
+        ptSelectedDisk = diskName;
+        $(".pt-disk-item").removeClass("is-active");
+        $(`.pt-disk-item[devname="${diskName}"]`).addClass("is-active");
+        let disk = ptDisks.find(function(d){ return d.name == diskName; });
+        if (disk == undefined){ return; }
+
+        // Partition bar segments
+        let barSegments = "";
+        disk.segments.forEach(function(segment, index){
+            let widthPercent = (segment.sizeByte / disk.sizeByte * 100).toFixed(2);
+            if (segment.type == "free"){
+                barSegments += `<div class="pt-segment free" style="width: ${widthPercent}%;" title="Free space — ${ptHumanSize(segment.sizeByte)}">
+                    <span class="pt-segment-label">${ptHumanSize(segment.sizeByte)}</span>
+                </div>`;
+            }else{
+                let partName = segment.path.split("/").pop();
+                barSegments += `<div class="pt-segment" style="width: ${widthPercent}%; background: ${ptFsColor(segment.fstype)};" title="${partName} (${ptEsc(segment.fstype)}) — ${ptHumanSize(segment.sizeByte)}">
+                    <span class="pt-segment-label">${partName}</span>
+                </div>`;
+            }
+        });
+
+        // Segment table rows
+        let rows = "";
+        disk.segments.forEach(function(segment, index){
+            if (segment.type == "free"){
+                // Ignore tiny alignment gaps below 4 MB
+                if (segment.sizeByte < 4 * 1024 * 1024){ return; }
+                rows += `<tr>
+                    <td></td>
+                    <td><span class="pt-fs-legend" style="background: var(--ts-gray-300);"></span><i i18n>Free space // 可用空間</i></td>
+                    <td>-</td>
+                    <td>${ptHumanSize(segment.sizeByte)}</td>
+                    <td>-</td>
+                    <td>
+                        <button class="ts-button is-small is-positive is-start-icon" ${disk.table == "none" ? "disabled" : ""} onclick="showMkpartDialog(${index});">
+                            <span class="ts-icon is-circle-plus-icon"></span>
+                            <span i18n>Create // 建立</span>
+                        </button>
+                    </td>
+                </tr>`;
+            }else{
+                let partName = segment.path.split("/").pop();
+                let stateBadge = segment.mounted
+                    ? `<span class="ts-badge is-secondary">${ptEsc(segment.mountPoint)}</span>`
+                    : "-";
+
+                // A partition can be extended when unused space follows it
+                // directly (at least 4 MB, ignoring alignment gaps)
+                let next = disk.segments[index + 1];
+                let canExtend = !segment.mounted && segment.number > 0 &&
+                    next != undefined && next.type == "free" && next.sizeByte >= 4 * 1024 * 1024;
+
+                let selectBox = "";
+                if (!segment.mounted && segment.number > 0){
+                    selectBox = `<label class="ts-checkbox"><input type="checkbox" class="pt-part-select" value="${segment.number}" onchange="updateDeleteSelectedBtn();"></label>`;
+                }
+
+                let actionBtns = "";
+                if (segment.mounted){
+                    actionBtns = `<span class="ts-text is-tiny is-description" i18n>Unmount in the Disks tab to edit
+                        // 請先在磁碟頁面卸載後再編輯
+                    </span>`;
+                }else{
+                    // Whole-disk filesystems (loop table, e.g. md volumes)
+                    // have no partition entry to delete or extend
+                    let deleteBtn = segment.number > 0 ? `
+                        <button class="ts-button is-small is-negative is-start-icon" onclick="showDeletePartDialog(${index});">
+                            <span class="ts-icon is-trash-icon"></span>
+                            <span i18n>Delete // 刪除</span>
+                        </button>` : "";
+                    let extendBtn = canExtend ? `
+                        <button class="ts-button is-small is-start-icon" onclick="showExtendDialog(${index});">
+                            <span class="ts-icon is-right-long-icon" style="color: var(--ts-primary-500);"></span>
+                            <span i18n>Extend // 擴充</span>
+                        </button>` : "";
+                    actionBtns = `
+                        <button class="ts-button is-small is-start-icon" onclick="showFormatDialog(${index});">
+                            <span class="ts-icon is-eraser-icon"></span>
+                            <span i18n>Format // 格式化</span>
+                        </button>${extendBtn}${deleteBtn}`;
+                }
+                rows += `<tr>
+                    <td>${selectBox}</td>
+                    <td><span class="pt-fs-legend" style="background: ${ptFsColor(segment.fstype)};"></span>${partName}</td>
+                    <td>${ptEsc(segment.fstype) || "-"}</td>
+                    <td>${ptHumanSize(segment.sizeByte)}</td>
+                    <td>${stateBadge}</td>
+                    <td><div class="ts-wrap is-compact">${actionBtns}</div></td>
+                </tr>`;
+            }
+        });
+
+        let noTableNotice = "";
+        if (disk.table == "none"){
+            noTableNotice = `<div class="ts-notice has-top-spaced">
+                <div class="content" i18n>This disk has no partition table. Create one before adding partitions.
+                    // 此磁碟沒有分割表。請先建立分割表，然後再新增分割區。
+                </div>
+            </div>`;
+        }
+
+        $("#pt_disk_view").html(`
+            <div class="ts-box">
+                <div class="ts-content is-padded">
+                    <div class="ts-grid is-middle-aligned">
+                        <div class="column is-fluid">
+                            <div class="ts-header is-heavy">${ptEsc(disk.model) || disk.path}</div>
+                            <div class="ts-text is-description">
+                                ${disk.path} &nbsp;•&nbsp; ${ptHumanSize(disk.sizeByte)} &nbsp;•&nbsp;
+                                <span i18n>Partition table // 分割表</span>: ${disk.table == "none" ? '<span class="ts-badge is-negative">none</span>' : `<span class="ts-badge">${disk.table}</span>`}
+                            </div>
+                        </div>
+                        <div class="column">
+                            <div style="position: relative; display: inline-block;">
+                                <button class="ts-button is-start-icon" onclick="togglePtActionMenu(event);">
+                                    <span class="ts-icon is-screwdriver-wrench-icon"></span>
+                                    <span i18n>Disk Actions
+                                        // 磁碟操作
+                                    </span>
+                                    <span class="ts-icon is-end-spaced is-caret-down-icon has-start-spaced-small"></span>
+                                </button>
+                                <div id="pt_disk_actions_menu" class="ts-menu is-dense" style="display:none; position:absolute; right:0; top:calc(100% + 4px); z-index:200; min-width: 240px; background: var(--ts-gray-50); border: 1px solid var(--ts-gray-300); border-radius: 0.4em; box-shadow: 0 6px 18px rgba(0,0,0,0.18); overflow:hidden;">
+                                    ${disk.isRaidVolume ? `
+                                    <a class="item ${disk.busy ? "is-disabled" : ""}" onclick="ptActionMenuRun(function(){ showFormatWholeDiskDialog('${disk.name}'); }, ${disk.busy});">
+                                        <span class="ts-icon is-eraser-icon is-end-spaced"></span>
+                                        <span i18n>Format Volume
+                                            // 格式化磁碟區
+                                        </span>
+                                    </a>` : ""}
+                                    <a class="item ${disk.busy ? "is-disabled" : ""}" onclick="ptActionMenuRun(function(){ showRecreateDialog('${disk.name}'); }, ${disk.busy});">
+                                        <span class="ts-icon is-table-cells-large-icon is-end-spaced"></span>
+                                        <span i18n>Recreate Disk
+                                            // 重建磁碟
+                                        </span>
+                                    </a>
+                                    <a class="item ${disk.busy ? "is-disabled" : ""}" onclick="ptActionMenuRun(function(){ showMklabelDialog('${disk.name}'); }, ${disk.busy});">
+                                        <span class="ts-icon is-table-icon is-end-spaced"></span>
+                                        <span i18n>New Partition Table
+                                            // 新增分割表
+                                        </span>
+                                    </a>
+                                    ${disk.busy ? `
+                                    <div class="item is-disabled" style="pointer-events:none;">
+                                        <span class="ts-text is-tiny is-description" i18n>Unmount all partitions to enable
+                                            // 卸載所有分割區後才能使用
+                                        </span>
+                                    </div>` : ""}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-disk-bar has-top-spaced-large">
+                        ${barSegments}
+                    </div>
+
+                    ${noTableNotice}
+
+                    <div class="has-top-spaced-large">
+                        <button id="pt_delete_selected_btn" class="ts-button is-small is-negative is-start-icon" style="display:none;" onclick="showDeleteSelectedWarning();">
+                            <span class="ts-icon is-trash-icon"></span>
+                            <span i18n>Delete Selected // 刪除所選</span>
+                            (<span id="pt_delete_selected_count">0</span>)
+                        </button>
+                    </div>
+                    <table class="ts-table is-single-line has-top-spaced-small">
+                        <thead>
+                            <tr>
+                                <th style="width: 2em;"></th>
+                                <th i18n>Partition // 分割區</th>
+                                <th i18n>File System // 檔案系統</th>
+                                <th i18n>Size // 大小</th>
+                                <th i18n>Mount Point // 掛載點</th>
+                                <th i18n>Actions // 操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            </div>
+        `);
+        relocale();
+    }
+
+    /* New partition table */
+    function showMklabelDialog(diskName){
+        ptPendingAction = { disk: diskName };
+        $("#pt_mklabel_target").text("/dev/" + diskName);
+        $("#pt_mklabel_understand")[0].checked = false;
+        $("#pt_mklabel_dialog")[0].showModal();
+    }
+
+    function confirmMklabel(){
+        if (!$("#pt_mklabel_understand")[0].checked){
+            msgbox(i18nc("parttool_confirm_required"));
+            return;
+        }
+        let disk = ptPendingAction.disk;
+        $("#pt_mklabel_dialog")[0].close();
+        showLoading("Creating partition table...");
+        $.cjax({
+            url: "./api/parttool/mklabel",
+            method: "POST",
+            data: { disk: disk, table: $("#pt_mklabel_type").val() },
+            complete: function(){ hideLoading(); },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("parttool_table_created_succ"));
+                }
+                initPartToolDisks();
+            }
+        });
+    }
+
+    /* New partition */
+    function showMkpartDialog(segmentIndex){
+        let disk = ptDisks.find(function(d){ return d.name == ptSelectedDisk; });
+        if (disk == undefined){ return; }
+        let segment = disk.segments[segmentIndex];
+        if (segment == undefined || segment.type != "free"){ return; }
+
+        ptPendingAction = { disk: disk.name, segment: segment };
+        let freeMB = Math.floor(segment.sizeByte / (1024 * 1024));
+        $("#pt_mkpart_target").text("/dev/" + disk.name);
+        $("#pt_mkpart_freesize").text(ptHumanSize(segment.sizeByte));
+        $("#pt_mkpart_size").val(freeMB).attr("max", freeMB).attr("disabled", true);
+        $("#pt_mkpart_full")[0].checked = true;
+        $("#pt_mkpart_dialog")[0].showModal();
+    }
+
+    function ptMkpartFullToggle(){
+        if ($("#pt_mkpart_full")[0].checked){
+            let freeMB = Math.floor(ptPendingAction.segment.sizeByte / (1024 * 1024));
+            $("#pt_mkpart_size").val(freeMB).attr("disabled", true);
+        }else{
+            $("#pt_mkpart_size").removeAttr("disabled");
+        }
+    }
+
+    function confirmMkpart(){
+        let segment = ptPendingAction.segment;
+        let sizeMB = parseInt($("#pt_mkpart_size").val());
+        let freeMB = Math.floor(segment.sizeByte / (1024 * 1024));
+        if (isNaN(sizeMB) || sizeMB < 1 || sizeMB > freeMB){
+            msgbox(i18nc("parttool_invalid_size"));
+            return;
+        }
+        let start = segment.startByte;
+        let end = $("#pt_mkpart_full")[0].checked
+            ? segment.endByte
+            : start + sizeMB * 1024 * 1024;
+
+        $("#pt_mkpart_dialog")[0].close();
+        showLoading(i18nc("parttool_working"));
+        $.cjax({
+            url: "./api/parttool/mkpart",
+            method: "POST",
+            data: { disk: ptPendingAction.disk, start: start, end: end, fs: $("#pt_mkpart_fs").val() },
+            complete: function(){ hideLoading(); },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("parttool_part_created_succ"));
+                }
+                initPartToolDisks();
+            }
+        });
+    }
+
+    /* Format partition */
+    function showFormatDialog(segmentIndex){
+        let disk = ptDisks.find(function(d){ return d.name == ptSelectedDisk; });
+        if (disk == undefined){ return; }
+        let segment = disk.segments[segmentIndex];
+        if (segment == undefined || segment.type != "partition"){ return; }
+        ptPendingAction = { partition: segment.path.split("/").pop() };
+        $("#pt_format_target").text(segment.path);
+        $("#pt_format_dialog")[0].showModal();
+    }
+
+    // Format the whole device (RAID volumes like /dev/md0 carry their
+    // filesystem directly without a partition table)
+    function showFormatWholeDiskDialog(diskName){
+        ptPendingAction = { partition: diskName };
+        $("#pt_format_target").text("/dev/" + diskName);
+        $("#pt_format_dialog")[0].showModal();
+    }
+
+    function confirmFormatPartition(){
+        $("#pt_format_dialog")[0].close();
+        showLoading(i18nc("parttool_working"));
+        $.cjax({
+            url: "./api/parttool/format",
+            method: "POST",
+            data: { partition: ptPendingAction.partition, fs: $("#pt_format_fs").val() },
+            complete: function(){ hideLoading(); },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("parttool_formatted_succ"));
+                }
+                initPartToolDisks();
+            }
+        });
+    }
+
+    /* Delete partition */
+    function showDeletePartDialog(segmentIndex){
+        let disk = ptDisks.find(function(d){ return d.name == ptSelectedDisk; });
+        if (disk == undefined){ return; }
+        let segment = disk.segments[segmentIndex];
+        if (segment == undefined || segment.type != "partition"){ return; }
+        ptPendingAction = { disk: disk.name, number: segment.number };
+        $("#pt_delete_target").text(segment.path + " (" + ptHumanSize(segment.sizeByte) + ")");
+        $("#pt_delete_dialog")[0].showModal();
+    }
+
+    function confirmDeletePartition(){
+        $("#pt_delete_dialog")[0].close();
+        showLoading(i18nc("parttool_working"));
+        $.cjax({
+            url: "./api/parttool/rmpart",
+            method: "POST",
+            data: { disk: ptPendingAction.disk, number: ptPendingAction.number },
+            complete: function(){ hideLoading(); },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("parttool_part_deleted_succ"));
+                }
+                initPartToolDisks();
+            }
+        });
+    }
+
+    /* Multi-select delete */
+    function updateDeleteSelectedBtn(){
+        let count = $(".pt-part-select:checked").length;
+        $("#pt_delete_selected_count").text(count);
+        $("#pt_delete_selected_btn").toggle(count > 0);
+    }
+
+    function showDeleteSelectedWarning(){
+        let numbers = [];
+        $(".pt-part-select:checked").each(function(){
+            numbers.push(parseInt($(this).val()));
+        });
+        if (numbers.length == 0){ return; }
+        let disk = ptDisks.find(function(d){ return d.name == ptSelectedDisk; });
+        if (disk == undefined){ return; }
+
+        let names = numbers.map(function(number){
+            let segment = disk.segments.find(function(seg){ return seg.type == "partition" && seg.number == number; });
+            return segment ? segment.path : "#" + number;
+        });
+        ptPendingAction = { disk: disk.name, numbers: numbers };
+        $("#pt_delete_selected_list").text(names.join(", "));
+        $("#pt_delete_selected_dialog")[0].showModal();
+    }
+
+    function confirmDeleteSelected(){
+        $("#pt_delete_selected_dialog")[0].close();
+        showLoading(i18nc("parttool_working"));
+        $.cjax({
+            url: "./api/parttool/rmparts",
+            method: "POST",
+            data: { disk: ptPendingAction.disk, numbers: JSON.stringify(ptPendingAction.numbers) },
+            complete: function(){ hideLoading(); },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("parttool_parts_deleted_succ"));
+                }
+                initPartToolDisks();
+            }
+        });
+    }
+
+    /* Extend partition */
+    function showExtendDialog(segmentIndex){
+        let disk = ptDisks.find(function(d){ return d.name == ptSelectedDisk; });
+        if (disk == undefined){ return; }
+        let segment = disk.segments[segmentIndex];
+        let following = disk.segments[segmentIndex + 1];
+        if (segment == undefined || following == undefined || following.type != "free"){ return; }
+
+        ptPendingAction = { disk: disk.name, segment: segment, following: following };
+        let availMB = Math.floor(following.sizeByte / (1024 * 1024));
+        $("#pt_extend_target").text(segment.path);
+        $("#pt_extend_current").text(ptHumanSize(segment.sizeByte));
+        $("#pt_extend_available").text(ptHumanSize(following.sizeByte));
+        $("#pt_extend_size").val(availMB).attr("max", availMB).attr("disabled", true);
+        $("#pt_extend_full")[0].checked = true;
+        $("#pt_extend_dialog")[0].showModal();
+    }
+
+    function ptExtendFullToggle(){
+        if ($("#pt_extend_full")[0].checked){
+            let availMB = Math.floor(ptPendingAction.following.sizeByte / (1024 * 1024));
+            $("#pt_extend_size").val(availMB).attr("disabled", true);
+        }else{
+            $("#pt_extend_size").removeAttr("disabled");
+        }
+    }
+
+    function confirmExtendPartition(){
+        let segment = ptPendingAction.segment;
+        let following = ptPendingAction.following;
+        let availMB = Math.floor(following.sizeByte / (1024 * 1024));
+        let growMB = parseInt($("#pt_extend_size").val());
+        if (isNaN(growMB) || growMB < 1 || growMB > availMB){
+            msgbox(i18nc("parttool_invalid_size"));
+            return;
+        }
+        let newEnd = $("#pt_extend_full")[0].checked
+            ? following.endByte
+            : segment.endByte + growMB * 1024 * 1024;
+
+        $("#pt_extend_dialog")[0].close();
+        showLoading(i18nc("parttool_working"));
+        $.cjax({
+            url: "./api/parttool/extend",
+            method: "POST",
+            data: { disk: ptPendingAction.disk, number: segment.number, end: newEnd },
+            complete: function(){ hideLoading(); },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error, 8000);
+                }else{
+                    msgbox(i18nc("parttool_extended_succ"));
+                }
+                initPartToolDisks();
+            }
+        });
+    }
+
+    /* Disk actions dropdown */
+    function togglePtActionMenu(event){
+        event.stopPropagation();
+        $("#pt_disk_actions_menu").toggle();
+    }
+
+    function ptActionMenuRun(action, disabled){
+        $("#pt_disk_actions_menu").hide();
+        if (disabled){ return; }
+        action();
+    }
+
+    // Close the action menu when clicking anywhere else
+    $(document).on("click.ptactions", function(){
+        $("#pt_disk_actions_menu").hide();
+    });
+
+    /* Recreate disk layout */
+    function recreateRowTemplate(){
+        return `<tr class="pt-recreate-row">
+            <td class="pt-rc-index" style="vertical-align: middle;">1</td>
+            <td>
+                <div class="ts-wrap is-compact is-middle-aligned" style="flex-wrap: nowrap;">
+                    <div class="ts-input is-small" style="width: 90px;">
+                        <input type="number" class="pt-rc-size" min="1" oninput="updateRecreateSummary();">
+                    </div>
+                    <div class="ts-select is-small">
+                        <select class="pt-rc-unit" onchange="updateRecreateSummary();">
+                            <option value="1">MB</option>
+                            <option value="1024" selected>GB</option>
+                            <option value="1048576">TB</option>
+                        </select>
+                    </div>
+                    <label class="ts-checkbox" style="white-space: nowrap;">
+                        <input type="checkbox" class="pt-rc-rest" onchange="ptRecreateRestToggle(this);">
+                        <span i18n>Rest // 剩餘</span>
+                    </label>
+                </div>
+            </td>
+            <td>
+                <div class="ts-select is-small is-fluid">
+                    <select class="pt-rc-fs">
+                        <option value="" selected i18n>Unallocated // 不格式化</option>
+                        <option value="ext4">ext4</option>
+                        <option value="ntfs">NTFS</option>
+                        <option value="fat32">FAT32</option>
+                    </select>
+                </div>
+            </td>
+            <td style="white-space: nowrap;">
+                <button class="ts-button is-small is-icon is-outlined" onclick="moveRecreateRow(this, -1);" title="Move up">
+                    <span class="ts-icon is-angle-up-icon"></span>
+                </button>
+                <button class="ts-button is-small is-icon is-outlined" onclick="moveRecreateRow(this, 1);" title="Move down">
+                    <span class="ts-icon is-angle-down-icon"></span>
+                </button>
+            </td>
+            <td>
+                <button class="ts-button is-small is-negative is-icon is-outlined" onclick="removeRecreateRow(this);">
+                    <span class="ts-icon is-xmark-icon"></span>
+                </button>
+            </td>
+        </tr>`;
+    }
+
+    // Renumber the # column after any row change
+    function updateRecreateIndexes(){
+        $("#pt_recreate_rows .pt-recreate-row").each(function(index){
+            $(this).find(".pt-rc-index").text(index + 1);
+        });
+    }
+
+    function addRecreateRow(){
+        $("#pt_recreate_rows").append(recreateRowTemplate());
+        relocale();
+        updateRecreateIndexes();
+        updateRecreateSummary();
+    }
+
+    function removeRecreateRow(btn){
+        if ($(".pt-recreate-row").length <= 1){
+            msgbox("At least one partition is required");
+            return;
+        }
+        $(btn).closest(".pt-recreate-row").remove();
+        updateRecreateIndexes();
+        updateRecreateSummary();
+    }
+
+    function moveRecreateRow(btn, direction){
+        let row = $(btn).closest(".pt-recreate-row");
+        if (direction < 0){
+            let prev = row.prev(".pt-recreate-row");
+            if (prev.length > 0){ row.insertBefore(prev); }
+        }else{
+            let next = row.next(".pt-recreate-row");
+            if (next.length > 0){ row.insertAfter(next); }
+        }
+        updateRecreateIndexes();
+        updateRecreateSummary();
+    }
+
+    function ptRecreateRestToggle(checkbox){
+        // Only one row may take the remaining space
+        if (checkbox.checked){
+            $(".pt-rc-rest").not(checkbox).prop("checked", false);
+        }
+        $(".pt-rc-rest").each(function(){
+            let row = $(this).closest(".pt-recreate-row");
+            if (this.checked){
+                row.find(".pt-rc-size, .pt-rc-unit").attr("disabled", true);
+            }else{
+                row.find(".pt-rc-size, .pt-rc-unit").removeAttr("disabled");
+            }
+        });
+        updateRecreateSummary();
+    }
+
+    // Reads one row's size in MB (0 = use remaining space)
+    function recreateRowSizeMB(row){
+        if ($(row).find(".pt-rc-rest")[0].checked){ return 0; }
+        let size = parseFloat($(row).find(".pt-rc-size").val());
+        let unit = parseInt($(row).find(".pt-rc-unit").val());
+        if (isNaN(size) || size <= 0){ return NaN; }
+        return Math.round(size * unit);
+    }
+
+    function updateRecreateSummary(){
+        let disk = ptDisks.find(function(d){ return d.name == ptSelectedDisk; });
+        if (disk == undefined){ return; }
+        let totalMB = 0;
+        let hasRest = false;
+        $(".pt-recreate-row").each(function(){
+            let sizeMB = recreateRowSizeMB(this);
+            if (sizeMB === 0){
+                hasRest = true;
+            }else if (!isNaN(sizeMB)){
+                totalMB += sizeMB;
+            }
+        });
+        let diskMB = Math.floor(disk.sizeByte / (1024 * 1024)) - 2; // alignment reserve
+        let text = `${ptHumanSize(totalMB * 1024 * 1024)} / ${ptHumanSize(disk.sizeByte)}`;
+        if (hasRest){
+            let restMB = diskMB - totalMB;
+            text += ` — remaining ${ptHumanSize(Math.max(restMB, 0) * 1024 * 1024)} goes to the "Rest" partition`;
+        }
+        if (totalMB > diskMB){
+            text += " — layout exceeds the disk size!";
+        }
+        $("#pt_recreate_summary").text(text);
+    }
+
+    function showRecreateDialog(diskName){
+        ptPendingAction = { disk: diskName };
+        $("#pt_recreate_target").text("/dev/" + diskName);
+        $("#pt_recreate_understand")[0].checked = false;
+        $("#pt_recreate_table").val("gpt");
+        $("#pt_recreate_rows").empty();
+        addRecreateRow();
+        // Default the single starter row to fill the whole disk
+        let firstRest = $(".pt-rc-rest").first();
+        firstRest.prop("checked", true);
+        ptRecreateRestToggle(firstRest[0]);
+        $("#pt_recreate_dialog")[0].showModal();
+    }
+
+    function confirmRecreate(){
+        if (!$("#pt_recreate_understand")[0].checked){
+            msgbox(i18nc("parttool_confirm_required"));
+            return;
+        }
+        let disk = ptDisks.find(function(d){ return d.name == ptSelectedDisk; });
+        if (disk == undefined){ return; }
+
+        // Collect + validate the rows: a "Rest" row must be the last one
+        let parts = [];
+        let valid = true;
+        let rows = $("#pt_recreate_rows .pt-recreate-row");
+        rows.each(function(index){
+            let fs = $(this).find(".pt-rc-fs").val();
+            let sizeMB = recreateRowSizeMB(this);
+            if (sizeMB === 0){
+                if (index != rows.length - 1){
+                    msgbox('The "Rest" partition must be the last one, use the order buttons to move it down');
+                    valid = false;
+                    return false;
+                }
+                parts.push({ sizeMB: 0, fs: fs });
+            }else{
+                if (isNaN(sizeMB)){
+                    msgbox(i18nc("parttool_invalid_size"));
+                    valid = false;
+                    return false;
+                }
+                parts.push({ sizeMB: sizeMB, fs: fs });
+            }
+        });
+        if (!valid || parts.length == 0){ return; }
+
+        let table = $("#pt_recreate_table").val();
+        if (table == "msdos" && parts.length > 4){
+            msgbox("msdos tables support at most 4 partitions, use GPT");
+            return;
+        }
+
+        $("#pt_recreate_dialog")[0].close();
+        showLoading(i18nc("parttool_working"));
+        $.cjax({
+            url: "./api/parttool/recreate",
+            method: "POST",
+            data: { disk: ptPendingAction.disk, table: table, parts: JSON.stringify(parts) },
+            complete: function(){ hideLoading(); },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error, 8000);
+                }else{
+                    msgbox(i18nc("parttool_recreated_succ"));
+                }
+                initPartToolDisks();
+            }
+        });
+    }
+
+    initPartToolDisks();
+</script>

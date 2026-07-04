@@ -7,10 +7,10 @@ import (
 
 	"log"
 
-	"imuslab.com/bokofs/bokofsd/mod/diskinfo/blkid"
-	"imuslab.com/bokofs/bokofsd/mod/diskinfo/df"
-	"imuslab.com/bokofs/bokofsd/mod/diskinfo/fdisk"
-	"imuslab.com/bokofs/bokofsd/mod/diskinfo/lsblk"
+	"imuslab.com/bokodm/bokodmd/mod/diskinfo/blkid"
+	"imuslab.com/bokodm/bokodmd/mod/diskinfo/df"
+	"imuslab.com/bokodm/bokodmd/mod/diskinfo/fdisk"
+	"imuslab.com/bokodm/bokodmd/mod/diskinfo/lsblk"
 )
 
 // GetAllDisks retrieves all disks on the system.
@@ -60,6 +60,8 @@ func DevicePathIsValidDisk(path string) bool {
 }
 
 // DevicePathIsPartition checks if the given device path is a valid partition.
+// The block device tree is searched recursively because devices can nest
+// more than one level deep (e.g. sdb → md0 → md0p1).
 func DevicePathIsValidPartition(path string) bool {
 	//Make sure the path has a prefix and a trailing slash
 	if !strings.HasPrefix(path, "/dev/") {
@@ -73,18 +75,24 @@ func DevicePathIsValidPartition(path string) bool {
 		return false
 	}
 
-	for _, blockDevice := range allBlockDevices {
-		if !strings.HasPrefix(path, "/dev/"+blockDevice.Name) {
-			//Skip this block device
-			//This is not a partition of this block device
-			continue
-		}
-		for _, child := range blockDevice.Children {
-			if "/dev/"+child.Name == path {
-				//As there are too many partition types
-				//We can only check if the block device is not a disk and exists
+	//Any device that appears below the top level qualifies: partitions
+	//(sda1), RAID volumes (md0) and partitions on RAID volumes (md0p1)
+	var findInChildren func(devices []lsblk.BlockDevice) bool
+	findInChildren = func(devices []lsblk.BlockDevice) bool {
+		for _, device := range devices {
+			if "/dev/"+device.Name == path {
 				return true
 			}
+			if findInChildren(device.Children) {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, blockDevice := range allBlockDevices {
+		if findInChildren(blockDevice.Children) {
+			return true
 		}
 	}
 
@@ -126,40 +134,52 @@ func GetDiskInfo(diskname string) (*Disk, error) {
 		return nil, err
 	}
 
-	for _, blockDevice := range allBlockDevices {
-		if blockDevice.Name == diskname {
-			thisDisk.Size = blockDevice.Size
-			for _, partition := range blockDevice.Children {
-				//Get the partition information from blkid
-				partition := &Partition{
-					Name:       partition.Name,
-					Size:       partition.Size,
-					Path:       filepath.Join("/dev", partition.Name),
-					BlockType:  partition.Type,
-					MountPoint: partition.MountPoint,
-				}
+	//Find the device anywhere in the tree: md RAID volumes are nested
+	//under their member disks instead of being top-level entries
+	var findDevice func(devices []lsblk.BlockDevice) *lsblk.BlockDevice
+	findDevice = func(devices []lsblk.BlockDevice) *lsblk.BlockDevice {
+		for i := range devices {
+			if devices[i].Name == diskname {
+				return &devices[i]
+			}
+			if match := findDevice(devices[i].Children); match != nil {
+				return match
+			}
+		}
+		return nil
+	}
 
-				//Get the partition ID
-				blkInfo, err := blkid.GetPartitionIDFromDevicePath(partition.Name)
-				if err == nil {
-					partition.UUID = blkInfo.UUID
-					partition.PartUUID = blkInfo.PartUUID
-					partition.PartLabel = blkInfo.PartLabel
-					partition.BlockSize = blkInfo.BlockSize
-					partition.BlockType = blkInfo.Type
-					partition.FsType = blkInfo.Type
-				}
-
-				//Get the disk usage information
-				diskUsage, err := df.GetDiskUsageByPath(partition.Name)
-				if err == nil {
-					partition.Used = diskUsage.Used
-					partition.Free = diskUsage.Available
-				}
-
-				thisDisk.Partitions = append(thisDisk.Partitions, partition)
+	if blockDevice := findDevice(allBlockDevices); blockDevice != nil {
+		thisDisk.Size = blockDevice.Size
+		for _, partition := range blockDevice.Children {
+			//Get the partition information from blkid
+			partition := &Partition{
+				Name:       partition.Name,
+				Size:       partition.Size,
+				Path:       filepath.Join("/dev", partition.Name),
+				BlockType:  partition.Type,
+				MountPoint: partition.MountPoint,
 			}
 
+			//Get the partition ID
+			blkInfo, err := blkid.GetPartitionIDFromDevicePath(partition.Name)
+			if err == nil {
+				partition.UUID = blkInfo.UUID
+				partition.PartUUID = blkInfo.PartUUID
+				partition.PartLabel = blkInfo.PartLabel
+				partition.BlockSize = blkInfo.BlockSize
+				partition.BlockType = blkInfo.Type
+				partition.FsType = blkInfo.Type
+			}
+
+			//Get the disk usage information
+			diskUsage, err := df.GetDiskUsageByPath(partition.Name)
+			if err == nil {
+				partition.Used = diskUsage.Used
+				partition.Free = diskUsage.Available
+			}
+
+			thisDisk.Partitions = append(thisDisk.Partitions, partition)
 		}
 	}
 

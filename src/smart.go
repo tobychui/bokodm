@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"imuslab.com/bokofs/bokofsd/mod/diskinfo"
-	"imuslab.com/bokofs/bokofsd/mod/diskinfo/smart"
-	"imuslab.com/bokofs/bokofsd/mod/utils"
+	"imuslab.com/bokodm/bokodmd/mod/diskinfo"
+	"imuslab.com/bokodm/bokodmd/mod/diskinfo/smart"
+	"imuslab.com/bokodm/bokodmd/mod/utils"
 )
 
 /*

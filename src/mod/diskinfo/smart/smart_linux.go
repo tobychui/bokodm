@@ -7,7 +7,7 @@ import (
 	"errors"
 	"strings"
 
-	"imuslab.com/bokofs/bokofsd/mod/diskinfo"
+	"imuslab.com/bokodm/bokodmd/mod/diskinfo"
 )
 
 // getDiskType uses Linux device naming conventions to identify the disk type.

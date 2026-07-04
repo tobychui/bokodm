@@ -13,8 +13,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/csrf"
-	"imuslab.com/bokofs/bokofsd/mod/disktool/raid"
-	"imuslab.com/bokofs/bokofsd/mod/netstat"
+	"imuslab.com/bokodm/bokodmd/mod/disktool/raid"
+	"imuslab.com/bokodm/bokodmd/mod/logger"
+	"imuslab.com/bokodm/bokodmd/mod/netmount"
+	"imuslab.com/bokodm/bokodmd/mod/netstat"
 )
 
 /*
@@ -94,14 +96,51 @@ func initialization() error {
 		raidManager = rm
 	}
 
+	/* Disk IO throughput sampler */
+	startDiskIOSampler()
+
+	/* Log store (must be up before anything shells out to system tools) */
+	if err := logger.Init("./logs"); err != nil {
+		return fmt.Errorf("error creating log folder: %v", err)
+	}
+
+	/* System settings, scheduled disk monitoring and automounts */
+	loadSettings()
+	loadNotifyState()
+	logger.SetConfig(sysSettings.Logs.RetentionMonths, sysSettings.Logs.MaxTotalSizeMB)
+	logger.StartAutoCleanup()
+	logger.Write("system", "bokodm started")
+	restartDiskMonitor()
+	go applyAutoMounts()
+
+	/* Network filesystem mount manager */
+	nm, err := netmount.NewManager(configFolderPath + "/netmounts.json")
+	if err != nil {
+		return fmt.Errorf("error creating network mount manager: %v", err)
+	}
+	netmountManager = nm
+
 	/* CSRF Middleware */
-	csrfMiddleware = csrf.Protect(
+	protect := csrf.Protect(
 		[]byte(sysuuid),
 		csrf.CookieName(CSRF_COOKIENAME),
 		csrf.Secure(false),
 		csrf.Path("/"),
 		csrf.SameSite(csrf.SameSiteLaxMode),
 	)
+	// gorilla/csrf >= 1.7.2 assumes requests are served over TLS unless the
+	// request context says otherwise, which rejects every POST on a plain
+	// HTTP server. Mark non-TLS requests as plaintext so the origin check
+	// compares against http:// instead of https://.
+	csrfMiddleware = func(next http.Handler) http.Handler {
+		inner := protect(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.TLS == nil {
+				r = csrf.PlaintextHTTPRequest(r)
+			}
+			inner.ServeHTTP(w, r)
+		})
+	}
 
 	return nil
 }

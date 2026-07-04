@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en" class="is-white">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title i18n>
+        Analytics Report | BokoDM
+        // 分析報告 | BokoDM
+    </title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tocas-ui/5.0.2/tocas.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="./js/dom-i18n.min.js"></script>
+    <link rel="icon" type="image/png" href="img/favicon.png">
+    <style>
+        body{
+            background: #ffffff;
+        }
+        .report-section{
+            margin-top: 2em;
+            page-break-inside: avoid;
+        }
+        .report-disk{
+            margin-top: 2em;
+            page-break-inside: avoid;
+        }
+        .ts-table th{
+            white-space: nowrap;
+        }
+        .prop-table td:first-child{
+            font-weight: 600;
+            width: 30%;
+            white-space: nowrap;
+        }
+        @media print {
+            .no-print{
+                display: none !important;
+            }
+            .ts-container{
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+            a{
+                text-decoration: none;
+                color: inherit;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="ts-content">
+        <div class="ts-container">
+            <div class="ts-grid is-middle-aligned">
+                <div class="column is-fluid">
+                    <img class="ts-image" style="height: 36px" src="img/logo.svg">
+                    <div class="ts-header is-huge is-heavy has-top-spaced-small" i18n>
+                        System Analytics Report
+                        // 系統分析報告
+                    </div>
+                    <div class="ts-text is-description" id="report_meta"></div>
+                </div>
+                <div class="column no-print">
+                    <a class="ts-button is-start-icon" href="./api/info/report?format=pdf">
+                        <span class="ts-icon is-file-arrow-down-icon"></span>
+                        <span i18n>Download PDF
+                            // 下載 PDF
+                        </span>
+                    </a>
+                    <button class="ts-button is-outlined is-start-icon" onclick="window.print();">
+                        <span class="ts-icon is-print-icon"></span>
+                        <span i18n>Print
+                            // 列印
+                        </span>
+                    </button>
+                    <a class="ts-button is-outlined" href="./" i18n>
+                        Back
+                        // 返回
+                    </a>
+                </div>
+            </div>
+
+            <div id="report_loading" class="ts-blankslate has-top-spaced-large">
+                <div class="description">
+                    <span class="ts-icon is-circle-notch-icon is-spinning"></span>
+                    <span class="has-start-spaced-small" i18n>Generating report, this may take a while...
+                        // 正在產生報告，這可能需要一些時間...
+                    </span>
+                </div>
+            </div>
+
+            <div id="report_body" style="display:none;">
+                <!-- System Info -->
+                <div class="report-section">
+                    <div class="ts-header is-large is-heavy" i18n>1. System Information
+                        // 1. 系統資訊
+                    </div>
+                    <table class="ts-table is-celled prop-table has-top-spaced-small">
+                        <tbody id="section_host"></tbody>
+                    </table>
+                </div>
+
+                <!-- Network Interfaces -->
+                <div class="report-section">
+                    <div class="ts-header is-large is-heavy" i18n>2. Network Interfaces
+                        // 2. 網路介面
+                    </div>
+                    <table class="ts-table is-celled has-top-spaced-small">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th i18n>Interface // 介面</th>
+                                <th i18n>IP Addresses // IP 位址</th>
+                            </tr>
+                        </thead>
+                        <tbody id="section_network"></tbody>
+                    </table>
+                </div>
+
+                <!-- RAID Arrays -->
+                <div class="report-section">
+                    <div class="ts-header is-large is-heavy" i18n>3. RAID Arrays
+                        // 3. 磁碟陣列
+                    </div>
+                    <div id="section_raid"></div>
+                </div>
+
+                <!-- Disks -->
+                <div class="report-section">
+                    <div class="ts-header is-large is-heavy" i18n>4. Disks &amp; Partitions
+                        // 4. 磁碟與分割區
+                    </div>
+                    <div id="section_disks"></div>
+                </div>
+
+                <!-- Dependencies -->
+                <div class="report-section">
+                    <div class="ts-header is-large is-heavy" i18n>5. System Tools
+                        // 5. 系統工具
+                    </div>
+                    <table class="ts-table is-celled has-top-spaced-small">
+                        <thead>
+                            <tr>
+                                <th i18n>Tool // 工具</th>
+                                <th i18n>Status // 狀態</th>
+                                <th i18n>Purpose // 用途</th>
+                            </tr>
+                        </thead>
+                        <tbody id="section_deps"></tbody>
+                    </table>
+                </div>
+
+                <div class="ts-divider has-top-spaced-large"></div>
+                <div class="ts-text is-description has-top-spaced-small has-bottom-spaced-large">
+                    BokoDM &copy; tobychui 2024 - <span class="thisyear"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        function humanFileSize(size) {
+            if (size === undefined || size === null || isNaN(size)) return "-";
+            var i = size <= 0 ? 0 : Math.floor(Math.log(size) / Math.log(1024));
+            return +((size / Math.pow(1024, i)).toFixed(1)) * 1 + ' ' + ['B', 'kB', 'MB', 'GB', 'TB', 'PB'][i];
+        }
+
+        function esc(text){
+            if (text === undefined || text === null || text === "") return "-";
+            return $("<span>").text(text).html();
+        }
+
+        function formatUptime(sec){
+            if (!sec) return "-";
+            let d = Math.floor(sec / 86400);
+            let h = Math.floor((sec % 86400) / 3600);
+            let m = Math.floor((sec % 3600) / 60);
+            return `${d}d ${h}h ${m}m`;
+        }
+
+        function propRow(key, value){
+            return `<tr><td>${key}</td><td>${value}</td></tr>`;
+        }
+
+        function renderHost(report){
+            let host = report.host;
+            let rows = "";
+            rows += propRow("Hostname", esc(host.hostname));
+            rows += propRow("System UUID", esc(report.systemUUID));
+            rows += propRow("Operating System", esc(host.platform) + " " + esc(host.platformVersion));
+            rows += propRow("Kernel", esc(host.kernelVersion) + " (" + esc(host.kernelArch) + ")");
+            rows += propRow("CPU", esc(host.cpuModel) + " × " + esc(host.cpuCores) + " threads");
+            rows += propRow("Total Memory", humanFileSize(host.totalMemory));
+            rows += propRow("Uptime", formatUptime(host.uptimeSec));
+            rows += propRow("Boot Time", host.bootTime ? new Date(host.bootTime * 1000).toLocaleString() : "-");
+            $("#section_host").html(rows);
+        }
+
+        function renderNetwork(report){
+            let rows = "";
+            (report.networkInterfaces || []).forEach(function(iface){
+                rows += `<tr>
+                    <td>${esc(iface.ID)}</td>
+                    <td>${esc(iface.Name)}</td>
+                    <td>${(iface.IPs || []).map(esc).join("<br>") || "-"}</td>
+                </tr>`;
+            });
+            if (rows == ""){
+                rows = `<tr><td colspan="3">No network interface found</td></tr>`;
+            }
+            $("#section_network").html(rows);
+        }
+
+        function renderRAID(report){
+            let arrays = report.raidArrays || [];
+            if (arrays.length == 0){
+                $("#section_raid").html(`<p class="ts-text is-description has-top-spaced-small">No RAID array configured on this system.</p>`);
+                return;
+            }
+            let html = "";
+            arrays.forEach(function(raid){
+                let memberRows = "";
+                (raid.DeviceInfo || []).forEach(function(member){
+                    memberRows += `<tr>
+                        <td>${esc(member.DevicePath)}</td>
+                        <td>${esc(member.RaidDevice)}</td>
+                        <td>${(member.State || []).join(", ")}</td>
+                    </tr>`;
+                });
+                html += `<div class="ts-header is-heavy has-top-spaced-large">${esc(raid.DevicePath)} (${esc(raid.RaidLevel).toUpperCase()})</div>
+                <table class="ts-table is-celled prop-table has-top-spaced-small">
+                    <tbody>
+                        ${propRow("Array Name", esc(raid.Name))}
+                        ${propRow("UUID", esc(raid.UUID))}
+                        ${propRow("State", esc(raid.State))}
+                        ${propRow("Array Size", humanFileSize(raid.ArraySize * 1024))}
+                        ${propRow("Devices", `${raid.ActiveDevices} active / ${raid.WorkingDevices} working / ${raid.FailedDevices} failed / ${raid.SpareDevices} spare`)}
+                        ${propRow("Created", raid.CreationTime ? new Date(raid.CreationTime).toLocaleString() : "-")}
+                    </tbody>
+                </table>
+                <table class="ts-table is-celled has-top-spaced-small">
+                    <thead><tr><th>Member Device</th><th>Raid Device No.</th><th>State</th></tr></thead>
+                    <tbody>${memberRows}</tbody>
+                </table>`;
+            });
+            $("#section_raid").html(html);
+        }
+
+        function renderSmartHealth(health){
+            if (!health) return "";
+            let stateBadge = health.IsHealthy
+                ? `<span class="ts-badge is-positive">PASSED</span>`
+                : `<span class="ts-badge is-negative">FAILING</span>`;
+            return `<table class="ts-table is-celled prop-table has-top-spaced-small">
+                <tbody>
+                    ${propRow("SMART Overall Health", stateBadge)}
+                    ${propRow("Serial Number", esc(health.SerialNumber))}
+                    ${propRow("Power-on Hours", esc(health.PowerOnHours) + " hours")}
+                    ${propRow("Power Cycles", esc(health.PowerCycleCount))}
+                    ${propRow("Reallocated Sectors", esc(health.ReallocatedSectors))}
+                    ${propRow("Pending Sectors", esc(health.PendingSectors))}
+                    ${propRow("Uncorrectable Errors", esc(health.UncorrectableErrors))}
+                    ${propRow("UDMA CRC Errors", esc(health.UDMACRCErrors))}
+                    ${propRow("Total LBA Written", esc(health.TotalLBAWritten))}
+                    ${propRow("Media Type", health.IsNVMe ? "NVMe" : (health.IsSSD ? "SSD" : "HDD"))}
+                </tbody>
+            </table>`;
+        }
+
+        function renderSmartInfo(diskReport){
+            if (!diskReport.smartInfo) return "";
+            let info = diskReport.smartInfo;
+            let rows = "";
+            Object.keys(info).forEach(function(key){
+                // Insert a space between camel-case words for readability
+                let label = key.replace(/([a-z])([A-Z])/g, "$1 $2");
+                rows += propRow(esc(label), esc(String(info[key])));
+            });
+            return `<div class="ts-text is-bold has-top-spaced-small">Device Identity (${diskReport.smartType.toUpperCase()})</div>
+                <table class="ts-table is-celled prop-table has-top-spaced-small"><tbody>${rows}</tbody></table>`;
+        }
+
+        function renderDisks(report){
+            let html = "";
+            (report.disks || []).forEach(function(diskReport, idx){
+                let disk = diskReport.disk;
+                let partitionRows = "";
+                (disk.partitions || []).forEach(function(part){
+                    partitionRows += `<tr>
+                        <td>${esc(part.name)}</td>
+                        <td>${esc(part.fstype)}</td>
+                        <td>${humanFileSize(part.size)}</td>
+                        <td>${humanFileSize(part.used)}</td>
+                        <td>${esc(part.mountpoint)}</td>
+                        <td style="font-size: 0.85em;">${esc(part.uuid)}</td>
+                    </tr>`;
+                });
+                let partitionTable = partitionRows == "" ? `<p class="ts-text is-description">No partition on this disk.</p>` : `
+                    <table class="ts-table is-celled has-top-spaced-small">
+                        <thead><tr><th>Partition</th><th>FS</th><th>Size</th><th>Used</th><th>Mount Point</th><th>UUID</th></tr></thead>
+                        <tbody>${partitionRows}</tbody>
+                    </table>`;
+
+                html += `<div class="report-disk">
+                    <div class="ts-header is-heavy">4.${idx + 1} &nbsp; /dev/${esc(disk.name)} — ${esc(disk.model)}</div>
+                    <table class="ts-table is-celled prop-table has-top-spaced-small">
+                        <tbody>
+                            ${propRow("Identifier", esc(disk.identifier))}
+                            ${propRow("Size", humanFileSize(disk.size))}
+                            ${propRow("Used", humanFileSize(disk.used))}
+                            ${propRow("Disk Label", esc(disk.disklabel))}
+                        </tbody>
+                    </table>
+                    ${renderSmartHealth(diskReport.smartHealth)}
+                    ${renderSmartInfo(diskReport)}
+                    <div class="ts-text is-bold has-top-spaced-small">Partitions</div>
+                    ${partitionTable}
+                </div>`;
+            });
+            if (html == ""){
+                html = `<p class="ts-text is-description has-top-spaced-small">No disk found on this system.</p>`;
+            }
+            $("#section_disks").html(html);
+        }
+
+        function renderDeps(report){
+            let rows = "";
+            if (report.dependencies && report.dependencies.deps){
+                report.dependencies.deps.forEach(function(dep){
+                    let state = dep.found
+                        ? `<span class="ts-badge is-positive">Installed</span>`
+                        : `<span class="ts-badge is-negative">Missing</span>`;
+                    rows += `<tr><td>${esc(dep.name)}</td><td>${state}</td><td>${esc(dep.description)}</td></tr>`;
+                });
+            }
+            if (rows == ""){
+                rows = `<tr><td colspan="3">-</td></tr>`;
+            }
+            $("#section_deps").html(rows);
+        }
+
+        $(".thisyear").text(new Date().getFullYear());
+
+        $.get("./api/info/report", function(report){
+            $("#report_meta").text("Generated at " + new Date(report.generatedAt).toLocaleString() + " on " + (report.host.hostname || "unknown host"));
+            renderHost(report);
+            renderNetwork(report);
+            renderRAID(report);
+            renderDisks(report);
+            renderDeps(report);
+            $("#report_loading").hide();
+            $("#report_body").show();
+            if (typeof(relocale) != "undefined"){
+                relocale();
+            }
+        }).fail(function(){
+            $("#report_loading .description").html(`<span class="ts-icon is-circle-xmark-icon" style="color: var(--ts-negative-500);"></span>
+                <span class="has-start-spaced-small">Failed to generate report. Is the server running?</span>`);
+        });
+    </script>
+    <script src="./js/locale.js"></script>
+</body>
+</html>

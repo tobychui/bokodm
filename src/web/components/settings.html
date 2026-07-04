@@ -1,0 +1,548 @@
+<div class="ts-content">
+    <div class="ts-container is-padded">
+        <div class="ts-grid mobile:is-stacked">
+            <!-- Section menu -->
+            <div class="column is-4-wide">
+                <div class="ts-menu is-separated" id="settings_menu">
+                    <a class="item is-active" section="monitor" onclick="showSettingsSection('monitor');">
+                        <span class="ts-icon is-heart-pulse-icon is-end-spaced"></span>
+                        <span i18n>Disk Monitoring
+                            // 磁碟監控
+                        </span>
+                    </a>
+                    <a class="item" section="notification" onclick="showSettingsSection('notification');">
+                        <span class="ts-icon is-bell-icon is-end-spaced"></span>
+                        <span i18n>Notification
+                            // 通知
+                        </span>
+                    </a>
+                    <a class="item" section="automount" onclick="showSettingsSection('automount');">
+                        <span class="ts-icon is-link-icon is-end-spaced"></span>
+                        <span i18n>Auto Mounts
+                            // 自動掛載
+                        </span>
+                    </a>
+                    <a class="item" section="logs" onclick="showSettingsSection('logs');">
+                        <span class="ts-icon is-file-lines-icon is-end-spaced"></span>
+                        <span i18n>Logs
+                            // 日誌
+                        </span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Panels -->
+            <div class="column is-fluid">
+                <!-- Disk Monitoring -->
+                <div class="settings-section" id="settings_section_monitor">
+                    <div class="ts-box">
+                        <div class="ts-content is-padded">
+                            <div class="ts-header is-heavy" i18n>Scheduled SMART Monitoring
+                                // 排程 SMART 監控
+                            </div>
+                            <p class="ts-text is-description" i18n>Selected disks are SMART-checked at the configured interval. Every check is recorded in the monthly log, reviewable in the Logs tab.
+                                // 所選磁碟將按設定的時間間隔進行 SMART 檢查。每次檢查都會記錄在每月日誌中，可在「日誌」頁面檢閱。
+                            </p>
+
+                            <label class="ts-checkbox has-top-spaced">
+                                <input type="checkbox" id="mon_enabled">
+                                <span i18n>Enable scheduled monitoring
+                                    // 啟用排程監控
+                                </span>
+                            </label>
+
+                            <div class="ts-text is-label has-top-spaced" i18n>Check Interval
+                                // 檢查間隔
+                            </div>
+                            <div class="ts-row has-top-spaced-small">
+                                <div class="column">
+                                    <div class="ts-input">
+                                        <input type="number" id="mon_interval" min="1" value="1" style="width: 90px;">
+                                    </div>
+                                </div>
+                                <div class="column">
+                                    <div class="ts-select">
+                                        <select id="mon_interval_unit">
+                                            <option value="minute" i18n>minutes // 分鐘</option>
+                                            <option value="hour" selected i18n>hours // 小時</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="ts-text is-label has-top-spaced" i18n>Disks to Monitor
+                                // 監控的磁碟
+                            </div>
+                            <div id="mon_disk_list" class="has-top-spaced-small">
+                                <span class="ts-icon is-spinning is-circle-notch-icon"></span>
+                            </div>
+
+                            <div class="has-top-spaced-large">
+                                <button class="ts-button is-positive" onclick="saveMonitorSettings();" i18n>Save
+                                    // 儲存
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notification -->
+                <div class="settings-section" id="settings_section_notification" style="display:none;">
+                    <div class="ts-box">
+                        <div class="ts-content is-padded">
+                            <div class="ts-header is-heavy" i18n>Webhook Notification
+                                // Webhook 通知
+                            </div>
+                            <p class="ts-text is-description" i18n>When a monitored disk reaches the selected severity, a JSON alert is POSTed to your webhook. Requires Disk Monitoring to be enabled.
+                                // 當受監控的磁碟達到所選嚴重程度時，將向您的 Webhook 發送 JSON 警報。需要啟用磁碟監控。
+                            </p>
+
+                            <label class="ts-checkbox has-top-spaced">
+                                <input type="checkbox" id="ntf_enabled">
+                                <span i18n>Enable webhook notification
+                                    // 啟用 Webhook 通知
+                                </span>
+                            </label>
+
+                            <div class="ts-text is-label has-top-spaced" i18n>Webhook URL
+                                // Webhook 網址
+                            </div>
+                            <div class="ts-input is-fluid has-top-spaced-small">
+                                <input type="url" id="ntf_url" placeholder="https://example.com/webhook">
+                            </div>
+
+                            <div class="ts-text is-label has-top-spaced" i18n>Alert Threshold
+                                // 警報門檻
+                            </div>
+                            <div class="ts-select is-fluid has-top-spaced-small">
+                                <select id="ntf_threshold">
+                                    <option value="warning" i18n>Warning — early indicators (pending / reallocated sectors) // 警告 — 早期跡象（待處理／重新分配磁區）</option>
+                                    <option value="failing" i18n>Failing — SMART check failed or heavy reallocation // 故障中 — SMART 檢查失敗或大量重新分配</option>
+                                    <option value="critical" i18n>Critical — IO error, disk not responding // 嚴重 — IO 錯誤，磁碟無回應</option>
+                                </select>
+                            </div>
+
+                            <div class="ts-text is-label has-top-spaced" i18n>Rate Limit (per disk, at most one alert every)
+                                // 頻率限制（每個磁碟最多每隔多久通知一次）
+                            </div>
+                            <div class="ts-row has-top-spaced-small">
+                                <div class="column">
+                                    <div class="ts-input">
+                                        <input type="number" id="ntf_rate_number" min="1" value="1" style="width: 90px;">
+                                    </div>
+                                </div>
+                                <div class="column">
+                                    <div class="ts-select">
+                                        <select id="ntf_rate_unit">
+                                            <option value="hour" i18n>hour(s) // 小時</option>
+                                            <option value="day" selected i18n>day(s) // 天</option>
+                                            <option value="week" i18n>week(s) // 週</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="has-top-spaced-large">
+                                <div class="ts-wrap">
+                                    <button class="ts-button is-positive" onclick="saveNotificationSettings();" i18n>Save
+                                        // 儲存
+                                    </button>
+                                    <button class="ts-button is-outlined" onclick="sendTestNotification();" i18n>Send Test Alert
+                                        // 發送測試警報
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Auto Mounts -->
+                <div class="settings-section" id="settings_section_automount" style="display:none;">
+                    <div class="ts-box">
+                        <div class="ts-content is-padded">
+                            <div class="ts-header is-heavy" i18n>Partition Auto Mounts
+                                // 分割區自動掛載
+                            </div>
+                            <p class="ts-text is-description" i18n>These partitions are mounted automatically (by filesystem UUID) every time bokodm starts.
+                                // 每次 bokodm 啟動時，這些分割區將依檔案系統 UUID 自動掛載。
+                            </p>
+
+                            <table class="ts-table is-single-line has-top-spaced">
+                                <thead>
+                                    <tr>
+                                        <th i18n>Partition // 分割區</th>
+                                        <th i18n>Mount Point // 掛載點</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="am_part_list">
+                                    <tr><td colspan="3">-</td></tr>
+                                </tbody>
+                            </table>
+
+                            <div class="ts-divider has-top-spaced"></div>
+                            <div class="ts-text is-label has-top-spaced" i18n>Add Partition Auto Mount
+                                // 新增分割區自動掛載
+                            </div>
+                            <div class="ts-row has-top-spaced-small mobile:is-stacked">
+                                <div class="column">
+                                    <div class="ts-select">
+                                        <select id="am_partition"></select>
+                                    </div>
+                                </div>
+                                <div class="column is-fluid">
+                                    <div class="ts-input is-fluid">
+                                        <input type="text" id="am_mountpoint" placeholder="/media/data">
+                                    </div>
+                                </div>
+                                <div class="column">
+                                    <button class="ts-button is-outlined" onclick="pickFolder(function(p){ $('#am_mountpoint').val(p); }, '/mnt');" i18n>Browse
+                                        // 瀏覽
+                                    </button>
+                                    <button class="ts-button is-positive" onclick="addPartitionAutoMount();" i18n>Add
+                                        // 新增
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ts-box has-top-spaced">
+                        <div class="ts-content is-padded">
+                            <div class="ts-header is-heavy" i18n>Network Filesystem Auto Mounts
+                                // 網路檔案系統自動掛載
+                            </div>
+                            <p class="ts-text is-description" i18n>Toggle which network connections are mounted automatically when bokodm starts. Manage the connections themselves in the Connections tab.
+                                // 切換哪些網路連線在 bokodm 啟動時自動掛載。連線本身請在「連接」頁面管理。
+                            </p>
+                            <div id="am_netmount_list" class="has-top-spaced">
+                                <span class="ts-icon is-spinning is-circle-notch-icon"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs -->
+                <div class="settings-section" id="settings_section_logs" style="display:none;">
+                    <div class="ts-box">
+                        <div class="ts-content is-padded">
+                            <div class="ts-header is-heavy" i18n>Log Rotation &amp; Cleanup
+                                // 日誌輪替與清理
+                            </div>
+                            <p class="ts-text is-description" i18n>Log entries are grouped into one file per month and can be reviewed in the Logs tab. Old files are removed automatically according to the rules below.
+                                // 日誌記錄按月份分組為一個檔案，可在「日誌」頁面檢閱。舊檔案將依照以下規則自動刪除。
+                            </p>
+
+                            <div class="ts-text is-label has-top-spaced" i18n>Keep Logs For (months)
+                                // 日誌保留時間（月）
+                            </div>
+                            <div class="ts-input has-top-spaced-small">
+                                <input type="number" id="log_retention_months" min="0" max="1200" value="6" style="width: 120px;">
+                            </div>
+                            <div class="ts-text is-tiny is-description has-top-spaced-small" i18n>Monthly log files older than this are deleted. Set 0 to keep logs forever.
+                                // 超過此時間的每月日誌檔案將被刪除。設為 0 表示永久保留。
+                            </div>
+
+                            <div class="ts-text is-label has-top-spaced" i18n>Max Total Log Size (MB)
+                                // 日誌總大小上限（MB）
+                            </div>
+                            <div class="ts-input has-top-spaced-small">
+                                <input type="number" id="log_max_size" min="0" value="256" style="width: 120px;">
+                            </div>
+                            <div class="ts-text is-tiny is-description has-top-spaced-small" i18n>When the log folder grows beyond this size, the oldest files are purged first. Set 0 for no size limit. The current month's file is never deleted.
+                                // 當日誌資料夾超過此大小時，將優先清除最舊的檔案。設為 0 表示不限制大小。本月的日誌檔案永遠不會被刪除。
+                            </div>
+
+                            <div class="has-top-spaced-large">
+                                <button class="ts-button is-positive" onclick="saveLogSettings();" i18n>Save
+                                    // 儲存
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    /* Section switching */
+    function showSettingsSection(section){
+        $("#settings_menu .item").removeClass("is-active");
+        $(`#settings_menu .item[section="${section}"]`).addClass("is-active");
+        $(".settings-section").hide();
+        $(`#settings_section_${section}`).show();
+    }
+
+    /* Load current settings into the form */
+    function initSettingsTab(){
+        $.get("./api/settings/get", function(settings){
+            if (settings.error != undefined){ return; }
+
+            // Disk monitoring
+            $("#mon_enabled")[0].checked = settings.monitor.enabled;
+            let interval = settings.monitor.intervalMinutes || 60;
+            if (interval % 60 == 0){
+                $("#mon_interval").val(interval / 60);
+                $("#mon_interval_unit").val("hour");
+            }else{
+                $("#mon_interval").val(interval);
+                $("#mon_interval_unit").val("minute");
+            }
+            loadMonitorDiskList(settings.monitor.disks || []);
+
+            // Notification
+            $("#ntf_enabled")[0].checked = settings.notification.enabled;
+            $("#ntf_url").val(settings.notification.webhookURL || "");
+            $("#ntf_threshold").val(settings.notification.threshold || "failing");
+            $("#ntf_rate_number").val(settings.notification.rateNumber || 1);
+            $("#ntf_rate_unit").val(settings.notification.rateUnit || "day");
+
+            // Logs
+            if (settings.logs){
+                $("#log_retention_months").val(settings.logs.retentionMonths);
+                $("#log_max_size").val(settings.logs.maxTotalSizeMB);
+            }
+
+            // Partition automounts
+            renderPartitionAutoMounts(settings.automounts || []);
+        });
+        loadAutoMountPartitionOptions();
+        loadNetmountAutoMountList();
+    }
+
+    /* ── Disk monitoring ── */
+    function loadMonitorDiskList(selectedDisks){
+        $.get("./api/info/list", function(disks){
+            let container = $("#mon_disk_list");
+            container.empty();
+            if (!Array.isArray(disks) || disks.length == 0){
+                container.append(`<span class="ts-text is-description">No disk found</span>`);
+                return;
+            }
+            disks.forEach(function(disk){
+                let checked = selectedDisks.includes(disk.name) ? "checked" : "";
+                container.append(`<label class="ts-checkbox" style="display:block; margin-top: 0.4em;">
+                    <input type="checkbox" class="mon-disk-checkbox" value="${disk.name}" ${checked}>
+                    <span>/dev/${disk.name} — ${$("<span>").text(disk.model || "Unknown").html()}</span>
+                </label>`);
+            });
+        });
+    }
+
+    function saveMonitorSettings(){
+        let disks = [];
+        $(".mon-disk-checkbox:checked").each(function(){
+            disks.push($(this).val());
+        });
+        let interval = parseInt($("#mon_interval").val());
+        if (isNaN(interval) || interval < 1){
+            msgbox("Invalid check interval");
+            return;
+        }
+        if ($("#mon_interval_unit").val() == "hour"){
+            interval = interval * 60;
+        }
+        $.cjax({
+            url: "./api/settings/monitor",
+            method: "POST",
+            data: {
+                enabled: $("#mon_enabled")[0].checked,
+                disks: JSON.stringify(disks),
+                intervalMinutes: interval,
+            },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("settings_saved_succ"));
+                }
+            }
+        });
+    }
+
+    /* ── Notification ── */
+    function saveNotificationSettings(){
+        $.cjax({
+            url: "./api/settings/notification",
+            method: "POST",
+            data: {
+                enabled: $("#ntf_enabled")[0].checked,
+                url: $("#ntf_url").val().trim(),
+                threshold: $("#ntf_threshold").val(),
+                rateNumber: parseInt($("#ntf_rate_number").val()) || 1,
+                rateUnit: $("#ntf_rate_unit").val(),
+            },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("settings_saved_succ"));
+                }
+            }
+        });
+    }
+
+    function sendTestNotification(){
+        let url = $("#ntf_url").val().trim();
+        if (url == ""){
+            msgbox("Enter a webhook URL first");
+            return;
+        }
+        showLoading("Sending test alert...");
+        $.cjax({
+            url: "./api/settings/notification/test",
+            method: "POST",
+            data: { url: url },
+            complete: function(){ hideLoading(); },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("settings_test_sent_succ"));
+                }
+            }
+        });
+    }
+
+    /* ── Logs ── */
+    function saveLogSettings(){
+        let retention = parseInt($("#log_retention_months").val());
+        let maxSize = parseInt($("#log_max_size").val());
+        if (isNaN(retention) || retention < 0 || isNaN(maxSize) || maxSize < 0){
+            msgbox("Invalid log settings");
+            return;
+        }
+        $.cjax({
+            url: "./api/settings/logs",
+            method: "POST",
+            data: { retentionMonths: retention, maxTotalSizeMB: maxSize },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("settings_saved_succ"));
+                }
+            }
+        });
+    }
+
+    /* ── Partition auto mounts ── */
+    function renderPartitionAutoMounts(entries){
+        let tbody = $("#am_part_list");
+        tbody.empty();
+        if (entries.length == 0){
+            tbody.append(`<tr><td colspan="3"><span class="ts-text is-description" i18n>No automount configured
+                // 尚未設定自動掛載
+            </span></td></tr>`);
+            relocale();
+            return;
+        }
+        entries.forEach(function(entry){
+            tbody.append(`<tr>
+                <td>/dev/${$("<span>").text(entry.partition).html()}<br>
+                    <span class="ts-text is-tiny is-description">${$("<span>").text(entry.uuid).html()}</span></td>
+                <td>${$("<span>").text(entry.mountPoint).html()}</td>
+                <td>
+                    <button class="ts-button is-small is-negative is-icon" onclick="removePartitionAutoMount('${entry.uuid}');">
+                        <span class="ts-icon is-trash-icon"></span>
+                    </button>
+                </td>
+            </tr>`);
+        });
+    }
+
+    function loadAutoMountPartitionOptions(){
+        $.get("./api/info/list", function(disks){
+            let select = $("#am_partition");
+            select.empty();
+            if (!Array.isArray(disks)){ return; }
+            disks.forEach(function(disk){
+                (disk.partitions || []).forEach(function(partition){
+                    // Skip system partitions
+                    let mp = partition.mountpoint || "";
+                    if (mp == "/" || mp.startsWith("/boot") || mp == "[SWAP]"){ return; }
+                    select.append(`<option value="${partition.name}">/dev/${partition.name} (${partition.fstype || "?"})</option>`);
+                });
+            });
+        });
+    }
+
+    function addPartitionAutoMount(){
+        let partition = $("#am_partition").val();
+        let mountPoint = $("#am_mountpoint").val().trim();
+        if (!partition){ msgbox("Select a partition"); return; }
+        if (mountPoint == ""){ msgbox("Mount point is required"); return; }
+        showLoading("Adding automount...");
+        $.cjax({
+            url: "./api/settings/automount/add",
+            method: "POST",
+            data: { partition: partition, mountPoint: mountPoint },
+            complete: function(){ hideLoading(); },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("settings_saved_succ"));
+                    $("#am_mountpoint").val("");
+                }
+                initSettingsTab();
+            }
+        });
+    }
+
+    function removePartitionAutoMount(uuid){
+        $.cjax({
+            url: "./api/settings/automount/remove",
+            method: "POST",
+            data: { uuid: uuid },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                }else{
+                    msgbox(i18nc("settings_saved_succ"));
+                }
+                initSettingsTab();
+            }
+        });
+    }
+
+    /* ── Network fs automount toggles ── */
+    function loadNetmountAutoMountList(){
+        $.get("./api/netmount/list", function(conns){
+            let container = $("#am_netmount_list");
+            container.empty();
+            if (!Array.isArray(conns) || conns.length == 0){
+                container.append(`<span class="ts-text is-description" i18n>No network connection configured
+                    // 尚未設定網路連線
+                </span>`);
+                relocale();
+                return;
+            }
+            conns.forEach(function(conn){
+                container.append(`<label class="ts-checkbox" style="display:block; margin-top: 0.4em;">
+                    <input type="checkbox" ${conn.automount ? "checked" : ""} onchange="setNetmountAutoMount('${conn.uuid}', this.checked);">
+                    <span>${$("<span>").text(conn.name).html()} <span class="ts-text is-tiny is-description">(${conn.protocol} &rarr; ${$("<span>").text(conn.mountPoint).html()})</span></span>
+                </label>`);
+            });
+        });
+    }
+
+    function setNetmountAutoMount(uuid, automount){
+        $.cjax({
+            url: "./api/netmount/setautomount",
+            method: "POST",
+            data: { uuid: uuid, automount: automount },
+            success: function(data){
+                if (data.error != undefined){
+                    msgbox("Error: " + data.error);
+                    loadNetmountAutoMountList();
+                }else{
+                    msgbox(i18nc("settings_saved_succ"));
+                }
+            }
+        });
+    }
+
+    initSettingsTab();
+</script>

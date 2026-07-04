@@ -1,12 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
-
-	"imuslab.com/bokofs/bokofsd/mod/diskinfo/blkstat"
-	"imuslab.com/bokofs/bokofsd/mod/utils"
 )
 
 /*
@@ -58,25 +54,39 @@ func HandleRAIDCalls() http.Handler {
 			raidManager.HandleRemoveRaideDevice(w, r)
 			return
 		case "add":
-			// Add a new disk to the RAID device, require "dev=md0" as a query parameter
+			// Add a new disk to the RAID device, require POST "raidDev=md0" and "memDev=sdX"
 			raidManager.HandleAddDiskToRAIDVol(w, r)
 			return
-		case "test":
-			//DEBUG Code
-			devname, err := utils.GetPara(r, "dev")
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-
-			bs, err := blkstat.GetInstalledBus(devname)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-
-			js, _ := json.Marshal(bs)
-			utils.SendJSONResponse(w, string(js))
+		case "remove":
+			// Remove a member disk from the RAID device (fails it first when needed),
+			// require POST "raidDev=md0" and "memDev=sdX"
+			raidManager.HandleRemoveDiskFromRAIDVol(w, r)
+			return
+		case "fail":
+			// Mark a member disk as failed (step 1 of a disk swap),
+			// require POST "raidDev=md0" and "memDev=sdX"
+			raidManager.HandleFailDisk(w, r)
+			return
+		case "grow":
+			// Grow the RAID array to the maximum size of the current disks,
+			// require POST "raidDev=md0"
+			raidManager.HandleGrowRAIDArray(w, r)
+			return
+		case "format":
+			// Format the RAID device, require "devName=md0" and "format=ext4"
+			raidManager.HandleFormatRaidDevice(w, r)
+			return
+		case "candidates":
+			// List disks that can be added to a RAID volume as member / spare
+			raidManager.HandleListAddCandidates(w, r)
+			return
+		case "children":
+			// List block device info of all member disks, require "devName=md0"
+			raidManager.HandlListChildrenDeviceInfo(w, r)
+			return
+		case "label":
+			// Resolve the disk model label, require "devName=sdX"
+			raidManager.HandleResolveDiskModelLabel(w, r)
 			return
 		default:
 			http.Error(w, "Not Found", http.StatusNotFound)

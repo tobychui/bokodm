@@ -4,12 +4,13 @@ import (
 	"flag"
 	"net/http"
 
-	"imuslab.com/bokofs/bokofsd/mod/disktool/raid"
-	"imuslab.com/bokofs/bokofsd/mod/netstat"
+	"imuslab.com/bokodm/bokodmd/mod/disktool/raid"
+	"imuslab.com/bokodm/bokodmd/mod/netmount"
+	"imuslab.com/bokodm/bokodmd/mod/netstat"
 )
 
 const (
-	CSRF_COOKIENAME = "bokofs-csrf"
+	CSRF_COOKIENAME = "bokodm-csrf"
 )
 
 var (
@@ -30,6 +31,7 @@ var (
 	runtimeDeps *DependencyReport
 
 	/* Modules */
-	netstatBuffer *netstat.NetStatBuffers
-	raidManager   *raid.Manager
+	netstatBuffer   *netstat.NetStatBuffers
+	raidManager     *raid.Manager
+	netmountManager *netmount.Manager
 )

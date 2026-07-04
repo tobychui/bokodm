@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"imuslab.com/bokofs/bokofsd/mod/utils"
+	"imuslab.com/bokodm/bokodmd/mod/utils"
 )
 
 /*
@@ -258,7 +258,7 @@ func (m *Manager) FailDisk(mdDevice, diskPath string) error {
 	}
 
 	cmd := exec.Command("sudo", "mdadm", mdDevice, "--fail", diskPath)
-	if err := cmd.Run(); err != nil {
+	if _, err := utils.RunAndStream(cmd); err != nil {
 		return fmt.Errorf("failed to fail disk: %v", err)
 	}
 	return nil
@@ -276,7 +276,7 @@ func (m *Manager) RemoveDisk(mdDevice, diskPath string) error {
 	}
 
 	cmd := exec.Command("sudo", "mdadm", mdDevice, "--remove", diskPath)
-	if err := cmd.Run(); err != nil {
+	if _, err := utils.RunAndStream(cmd); err != nil {
 		return fmt.Errorf("failed to remove disk: %v", err)
 	}
 	return nil
@@ -293,7 +293,7 @@ func (m *Manager) AddDisk(mdDevice, diskPath string) error {
 	}
 
 	cmd := exec.Command("sudo", "mdadm", mdDevice, "--add", diskPath)
-	if err := cmd.Run(); err != nil {
+	if _, err := utils.RunAndStream(cmd); err != nil {
 		return fmt.Errorf("failed to add disk: %v", err)
 	}
 	return nil
@@ -308,7 +308,7 @@ func (m *Manager) GrowRAIDDevice(deviceName string) error {
 	cmd := exec.Command("sudo", "mdadm", "--grow", fmt.Sprintf("/dev/%s", deviceName), "--size=max")
 
 	// Execute the command
-	output, err := cmd.CombinedOutput()
+	output, err := utils.RunAndStream(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to grow RAID device: %v, output: %s", err, string(output))
 	}

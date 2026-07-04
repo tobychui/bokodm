@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"strings"
 
-	"imuslab.com/bokofs/bokofsd/mod/utils"
+	"imuslab.com/bokodm/bokodmd/mod/utils"
 )
 
 /*
@@ -59,12 +59,18 @@ func FormatPackageInstalled(fsType string) bool {
 
 // Create file system, support ntfs, ext4 and fat32 only
 func FormatStorageDevice(fsType string, devicePath string) error {
+	// Never format anything that is currently mounted, regardless of which
+	// caller forgot to check first
+	if mounted, err := DeviceIsMounted(devicePath); err == nil && mounted {
+		return errors.New(devicePath + " contains a mounted filesystem, unmount it first")
+	}
+
 	// Check if the filesystem type is supported
 	switch fsType {
 	case "ext4":
 		// Format the device with the specified filesystem type
 		cmd := exec.Command("sudo", "mkfs."+fsType, devicePath)
-		output, err := cmd.CombinedOutput()
+		output, err := utils.RunAndStream(cmd)
 		if err != nil {
 			return errors.New("unable to format device: " + string(output))
 		}
@@ -78,7 +84,7 @@ func FormatStorageDevice(fsType string, devicePath string) error {
 
 		// Format the device with the specified filesystem type
 		cmd := exec.Command("sudo", "mkfs.vfat", devicePath)
-		output, err := cmd.CombinedOutput()
+		output, err := utils.RunAndStream(cmd)
 		if err != nil {
 			return errors.New("unable to format device: " + string(output))
 		}
@@ -92,7 +98,7 @@ func FormatStorageDevice(fsType string, devicePath string) error {
 
 		//Format the drive
 		cmd := exec.Command("sudo", "mkfs.ntfs", devicePath)
-		output, err := cmd.CombinedOutput()
+		output, err := utils.RunAndStream(cmd)
 		if err != nil {
 			return errors.New("unable to format device: " + string(output))
 		}
@@ -227,7 +233,7 @@ func UnmountDevice(devicePath string) error {
 	cmd := exec.Command("sudo", "bash", "-c", fmt.Sprintf("umount -l %s", devicePath))
 
 	// Run the command
-	output, err := cmd.CombinedOutput()
+	output, err := utils.RunAndStream(cmd)
 	if err != nil {
 		log.Println("[RAID] Unable to unmount device: " + string(output))
 		return fmt.Errorf("error unmounting device: %v", err)
@@ -264,7 +270,7 @@ func WipeDisk(diskPath string) error {
 
 	// Wipe all filesystem signatures on the entire disk
 	wipeCmd := exec.Command("sudo", "wipefs", "--all", "--force", diskPath)
-	if err := wipeCmd.Run(); err != nil {
+	if _, err := utils.RunAndStream(wipeCmd); err != nil {
 		return fmt.Errorf("error wiping filesystem signatures on %s: %v", diskPath, err)
 	}
 
